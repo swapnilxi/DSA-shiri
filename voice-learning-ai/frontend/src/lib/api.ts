@@ -104,6 +104,7 @@ export const api = {
     num_questions: number;
     difficulty: string;
     model: string;
+    topics?: string;
   }) =>
     request<{
       questions: GeneratedQuestion[];

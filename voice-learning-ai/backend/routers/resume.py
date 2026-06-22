@@ -161,6 +161,7 @@ async def _save_questions_to_db(db: aiosqlite.Connection, questions: list[dict],
             )
             inserted += 1
         else:
+            print(f"[warn] duplicate skipped: {q['question'][:80]!r}")
             skipped += 1
     return inserted, skipped
 
@@ -228,6 +229,7 @@ async def save_questions(questions: list[dict]):
                 )
                 inserted += 1
             else:
+                print(f"[warn] duplicate skipped: {text[:80]!r}")
                 skipped += 1
         await db.commit()
     return {"inserted": inserted, "skipped": skipped}
@@ -238,6 +240,7 @@ class GenerateFromIdsRequest(BaseModel):
     num_questions: int = 10
     difficulty: str = "Mixed"
     model: Optional[str] = None
+    topics: Optional[str] = None
 
 
 @router.post("/upload")
@@ -284,6 +287,10 @@ async def generate_from_saved(req: GenerateFromIdsRequest):
     combined_text = "\n\n---\n\n".join(
         f"[{r['filename']}]\n{r['parsed_text'] or ''}" for r in rows
     )
+
+    if req.topics and req.topics.strip():
+        combined_text = f"[Topics / Additional Context]\n{req.topics.strip()}\n\n---\n\n{combined_text}"
+        source_names = f"topics + {source_names}"
 
     clean = await _run_llm(combined_text, num_questions, req.difficulty, llm_model)
 

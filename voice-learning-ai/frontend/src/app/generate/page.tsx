@@ -133,24 +133,43 @@ export default function GeneratePage() {
         });
         setResult({ questions: res.questions, source: res.source });
       } else {
-        // topics mode — file is now part of library section
         if (!topics.trim()) {
           setError("Please enter at least one topic.");
           return;
         }
-        const fd = new FormData();
-        fd.append("topics", topics);
-        fd.append("num_questions", String(numQuestions));
-        fd.append("difficulty", difficulty);
-        fd.append("model", model);
-        const res = await api.generateQuestions(fd);
-        setResult({ questions: res.questions, source: res.source });
+        if (selectedIds.size > 0) {
+          const res = await api.generateFromIds({
+            resume_ids: [...selectedIds],
+            num_questions: numQuestions,
+            difficulty,
+            model,
+            topics,
+          });
+          setResult({ questions: res.questions, source: res.source });
+        } else {
+          const fd = new FormData();
+          fd.append("topics", topics);
+          fd.append("num_questions", String(numQuestions));
+          fd.append("difficulty", difficulty);
+          fd.append("model", model);
+          const res = await api.generateQuestions(fd);
+          setResult({ questions: res.questions, source: res.source });
+        }
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setGenerating(false);
     }
+  }
+
+  function handleRemoveQuestion(index: number) {
+    setResult((prev) => {
+      if (!prev) return prev;
+      const updated = prev.questions.filter((_, i) => i !== index);
+      return { ...prev, questions: updated };
+    });
+    setSaveStatus(null);
   }
 
   async function handleSave() {
@@ -161,6 +180,9 @@ export default function GeneratePage() {
     try {
       const res = await api.saveQuestions(result.questions, result.source);
       setSaveStatus(res);
+      if (res.skipped > 0) {
+        console.warn(`[duplicates] ${res.skipped} question(s) already exist in DB and were skipped.`);
+      }
       loadLibrary();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
@@ -249,7 +271,7 @@ export default function GeneratePage() {
                   return (
                     <div
                       key={r.id}
-                      onClick={() => { toggleSelect(r.id); setMode("library"); }}
+                      onClick={() => { toggleSelect(r.id); if (mode !== "topics") setMode("library"); }}
                       className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer border transition-colors ${
                         selected
                           ? "bg-blue-900/30 border-blue-700"
@@ -375,6 +397,12 @@ export default function GeneratePage() {
               rows={6}
               className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm placeholder-gray-600 focus:outline-none focus:border-blue-600 resize-none"
             />
+            {selectedIds.size > 0 && (
+              <p className="mt-2 text-xs text-blue-400 flex items-center gap-1.5">
+                <FileText size={11} />
+                Will also use {selectedIds.size} selected file{selectedIds.size !== 1 ? "s" : ""} from library above
+              </p>
+            )}
           </div>
         )}
 
@@ -471,14 +499,23 @@ export default function GeneratePage() {
             <div className="space-y-3">
               {result.questions.map((q, i) => (
                 <div key={i} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <span className="text-xs font-medium text-blue-300 bg-blue-900/40 border border-blue-800 rounded px-2 py-0.5">
-                      {q.topic}
-                    </span>
-                    <span className={`text-xs font-medium border rounded px-2 py-0.5 ${DIFF_COLORS[q.difficulty]}`}>
-                      {q.difficulty}
-                    </span>
-                    {q.category && <span className="text-xs text-gray-500">{q.category}</span>}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap flex-1">
+                      <span className="text-xs font-medium text-blue-300 bg-blue-900/40 border border-blue-800 rounded px-2 py-0.5">
+                        {q.topic}
+                      </span>
+                      <span className={`text-xs font-medium border rounded px-2 py-0.5 ${DIFF_COLORS[q.difficulty]}`}>
+                        {q.difficulty}
+                      </span>
+                      {q.category && <span className="text-xs text-gray-500">{q.category}</span>}
+                    </div>
+                    <button
+                      onClick={() => handleRemoveQuestion(i)}
+                      className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-900/20 shrink-0 transition-colors"
+                      title="Remove question"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                   <p className="text-sm text-gray-200 leading-relaxed">{q.question}</p>
                   {q.expected_keywords && (
