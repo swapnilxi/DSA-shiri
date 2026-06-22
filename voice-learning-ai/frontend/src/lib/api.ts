@@ -80,10 +80,40 @@ export const api = {
       model_used: string;
     }>("/resume/generate", { method: "POST", body: formData }),
 
+  saveQuestions: (questions: GeneratedQuestion[], source?: string) =>
+    request<{ inserted: number; skipped: number }>("/resume/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(questions.map((q) => ({ ...q, source }))),
+    }),
+
+  getResumeLibrary: () =>
+    request<ResumeEntry[]>("/resume/history"),
+
+  deleteResume: (id: number) =>
+    request<{ deleted: number }>(`/resume/history/${id}`, { method: "DELETE" }),
+
+  generateFromIds: (opts: {
+    resume_ids: number[];
+    num_questions: number;
+    difficulty: string;
+    model: string;
+  }) =>
+    request<{
+      questions: GeneratedQuestion[];
+      inserted: number;
+      skipped: number;
+      source: string;
+      model_used: string;
+    }>("/resume/generate-from-ids", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(opts),
+    }),
+
+  /** @deprecated use getResumeLibrary */
   getGenerateHistory: () =>
-    request<{ id: number; filename: string; questions_generated: number; uploaded_at: string }[]>(
-      "/resume/history"
-    ),
+    request<ResumeEntry[]>("/resume/history"),
 
   getDbTable: (table: string, limit = 200) =>
     request<{ table: string; columns: string[]; rows: Record<string, unknown>[]; count: number }>(
@@ -91,7 +121,7 @@ export const api = {
     ),
 
   getSessions: () => request<Session[]>("/progress/sessions"),
-  getSessionDetail: (id: number) => request<{ session: Session; responses: Response[] }>(`/progress/sessions/${id}`),
+  getSessionDetail: (id: number) => request<{ session: Session; responses: SessionResponse[] }>(`/progress/sessions/${id}`),
   getMastery: () => request<TopicMastery[]>("/progress/mastery"),
   getStats: () => request<Stats>("/progress/stats"),
 };
@@ -128,6 +158,30 @@ export interface GeneratedQuestion {
   difficulty: "Easy" | "Medium" | "Hard";
   category: string;
   expected_keywords: string;
+}
+
+export interface SessionResponse {
+  id: number;
+  question_id: number;
+  topic: string;
+  question: string;
+  difficulty: "Easy" | "Medium" | "Hard";
+  transcript: string;
+  audio_duration: number;
+  total: number;
+  technical_correctness: number;
+  depth_completeness: number;
+  communication_clarity: number;
+  problem_solving: number;
+  llm_feedback: string;
+}
+
+export interface ResumeEntry {
+  id: number;
+  filename: string;
+  questions_generated: number;
+  uploaded_at: string;
+  preview?: string;
 }
 
 export interface Stats {

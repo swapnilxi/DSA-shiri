@@ -12,7 +12,7 @@ export default function InterviewPage() {
     <InterviewRoom
       sessionId={sessionId}
       topic={topic}
-      onEnd={() => router.push("/dashboard")}
+      onEnd={() => router.push(`/dashboard/session/${sessionId}`)}
     />
   );
 }
