@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft, FileText, List, Upload, Sparkles,
   CheckCircle, AlertCircle, ChevronDown,
-  Save, Trash2, BookOpen, X, Plus,
+  Save, Trash2, BookOpen, X, Plus, Download,
 } from "lucide-react";
 import { api, GeneratedQuestion, ResumeEntry } from "@/lib/api";
 
@@ -170,6 +170,25 @@ export default function GeneratePage() {
       return { ...prev, questions: updated };
     });
     setSaveStatus(null);
+  }
+
+  function handleExportCSV() {
+    if (!result) return;
+    const escape = (v: string) =>
+      v.includes(",") || v.includes('"') || v.includes("\n")
+        ? `"${v.replace(/"/g, '""')}"` : v;
+    const headers = "topic,question,difficulty,category,expected_keywords";
+    const lines = result.questions.map((q) =>
+      [q.topic, q.question, q.difficulty, q.category || "", q.expected_keywords || ""]
+        .map(escape).join(",")
+    );
+    const csv = [headers, ...lines].join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "generated_questions.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function handleSave() {
@@ -482,18 +501,26 @@ export default function GeneratePage() {
                 <CheckCircle size={15} className="text-green-400" />
                 {result.questions.length} questions · {result.source}
               </h2>
-              {alreadySaved ? (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-900/40 border border-green-800 rounded-lg text-sm text-green-300">
-                  <CheckCircle size={13} />
-                  Saved ({saveStatus!.inserted} new{saveStatus!.skipped > 0 ? `, ${saveStatus!.skipped} dupes` : ""})
-                </div>
-              ) : (
-                <button onClick={handleSave} disabled={saving}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-lg text-sm text-white border border-blue-600">
-                  <Save size={13} />
-                  {saving ? "Saving…" : "Save to DB"}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportCSV}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-sm text-gray-300"
+                >
+                  <Download size={13} /> Export CSV
                 </button>
-              )}
+                {alreadySaved ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-900/40 border border-green-800 rounded-lg text-sm text-green-300">
+                    <CheckCircle size={13} />
+                    Saved ({saveStatus!.inserted} new{saveStatus!.skipped > 0 ? `, ${saveStatus!.skipped} dupes` : ""})
+                  </div>
+                ) : (
+                  <button onClick={handleSave} disabled={saving}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-lg text-sm text-white border border-blue-600">
+                    <Save size={13} />
+                    {saving ? "Saving…" : "Save to DB"}
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -525,12 +552,22 @@ export default function GeneratePage() {
               ))}
             </div>
 
-            {result.questions.length > 4 && !alreadySaved && (
-              <button onClick={handleSave} disabled={saving}
-                className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm font-medium border border-blue-600">
-                <Save size={14} />
-                {saving ? "Saving…" : `Save all ${result.questions.length} questions to DB`}
-              </button>
+            {result.questions.length > 4 && (
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={handleExportCSV}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl text-sm text-gray-300"
+                >
+                  <Download size={14} /> Export CSV
+                </button>
+                {!alreadySaved && (
+                  <button onClick={handleSave} disabled={saving}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm font-medium border border-blue-600">
+                    <Save size={14} />
+                    {saving ? "Saving…" : `Save all ${result.questions.length} to DB`}
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}

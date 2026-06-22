@@ -35,7 +35,10 @@ async def start_session(body: SessionCreate):
             sql += " AND topic LIKE ?"
             params.append(f"%{body.topic}%")
         if body.company and body.company != "all":
-            sql += " AND company = ?"
+            sql += (
+                " AND (',' || REPLACE(LOWER(company), ' ', '') || ',') "
+                "LIKE ('%,' || REPLACE(LOWER(?), ' ', '') || ',%')"
+            )
             params.append(body.company)
         sql += " ORDER BY RANDOM() LIMIT ?"
         params.append(settings.max_questions_per_session)

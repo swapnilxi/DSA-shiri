@@ -3,7 +3,7 @@ Progress tracking — session history, topic mastery, score trends.
 """
 import aiosqlite
 import os
-from fastapi import APIRouter
+from fastapi import APIRouter, Body, HTTPException
 
 from config import settings
 
@@ -73,6 +73,34 @@ async def browse_table(table: str, limit: int = 200):
             rows = [dict(r) for r in await cur.fetchall()]
             columns = [d[0] for d in cur.description] if cur.description else []
     return {"table": table, "columns": columns, "rows": rows, "count": len(rows)}
+
+
+@router.delete("/db/{table}/rows")
+async def batch_delete_rows(table: str, ids: list[int] = Body(...)):
+    """Delete multiple rows by ID from any allowed table."""
+    ALLOWED = {"sessions", "questions", "responses", "scores", "topic_mastery"}
+    if table not in ALLOWED:
+        raise HTTPException(400, f"Unknown table '{table}'")
+    if not ids:
+        return {"deleted": 0}
+
+    placeholders = ",".join("?" * len(ids))
+    async with aiosqlite.connect(DB_PATH) as db:
+        if table == "sessions":
+            # cascade: scores → responses → session_questions → session
+            await db.execute(
+                f"DELETE FROM scores WHERE response_id IN "
+                f"(SELECT id FROM responses WHERE session_id IN ({placeholders}))", ids
+            )
+            await db.execute(
+                f"DELETE FROM responses WHERE session_id IN ({placeholders})", ids
+            )
+            await db.execute(
+                f"DELETE FROM session_questions WHERE session_id IN ({placeholders})", ids
+            )
+        await db.execute(f"DELETE FROM {table} WHERE id IN ({placeholders})", ids)
+        await db.commit()
+    return {"deleted": len(ids)}
 
 
 @router.get("/stats")

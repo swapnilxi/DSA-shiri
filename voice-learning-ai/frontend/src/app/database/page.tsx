@@ -1,7 +1,10 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Database, RefreshCw, ChevronUp, ChevronDown } from "lucide-react";
+import {
+  ArrowLeft, Database, RefreshCw, ChevronUp, ChevronDown,
+  Download, Trash2, Plus, Edit2, X, Save, Check,
+} from "lucide-react";
 import { api } from "@/lib/api";
 
 type Row = Record<string, unknown>;
@@ -13,6 +16,20 @@ interface TableData {
   count: number;
 }
 
+interface QuestionForm {
+  topic: string;
+  question: string;
+  difficulty: string;
+  company: string;
+  category: string;
+  expected_keywords: string;
+}
+
+const EMPTY_FORM: QuestionForm = {
+  topic: "", question: "", difficulty: "Medium",
+  company: "", category: "", expected_keywords: "",
+};
+
 const TABLES = [
   { name: "sessions",      label: "Sessions",      desc: "Every interview session" },
   { name: "responses",     label: "Responses",     desc: "Your spoken answers (transcribed)" },
@@ -21,7 +38,10 @@ const TABLES = [
   { name: "questions",     label: "Questions",     desc: "Loaded question bank" },
 ];
 
-const SCORE_COLS = new Set(["total", "technical_correctness", "depth_completeness", "communication_clarity", "problem_solving", "avg_score"]);
+const SCORE_COLS = new Set([
+  "total", "technical_correctness", "depth_completeness",
+  "communication_clarity", "problem_solving", "avg_score",
+]);
 
 export default function DatabasePage() {
   const router = useRouter();
@@ -31,10 +51,24 @@ export default function DatabasePage() {
   const [sortCol, setSortCol] = useState<string | null>(null);
   const [sortAsc, setSortAsc] = useState(false);
 
+  // Selection
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  // CRUD modal (questions only)
+  const [modal, setModal] = useState<{ mode: "add" | "edit"; row?: Row } | null>(null);
+  const [form, setForm] = useState<QuestionForm>(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+
+  // Action state
+  const [deleting, setDeleting] = useState(false);
+  const [actionError, setActionError] = useState("");
+
   const load = useCallback(async (table: string) => {
     setLoading(true);
     setData(null);
     setSortCol(null);
+    setSelectedIds(new Set());
+    setActionError("");
     try {
       const d = await api.getDbTable(table);
       setData(d);
@@ -45,32 +79,128 @@ export default function DatabasePage() {
     }
   }, []);
 
-  useEffect(() => {
-    load(activeTable);
-  }, [activeTable, load]);
+  useEffect(() => { load(activeTable); }, [activeTable, load]);
 
   function toggleSort(col: string) {
-    if (sortCol === col) {
-      setSortAsc((a) => !a);
-    } else {
-      setSortCol(col);
-      setSortAsc(false);
+    if (sortCol === col) setSortAsc((a) => !a);
+    else { setSortCol(col); setSortAsc(false); }
+  }
+
+  const rows = data
+    ? [...data.rows].sort((a, b) => {
+        if (!sortCol) return 0;
+        const av = a[sortCol] ?? "";
+        const bv = b[sortCol] ?? "";
+        const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+        return sortAsc ? cmp : -cmp;
+      })
+    : [];
+
+  // ── Selection ────────────────────────────────────────────────────────────────
+  const allSelected = rows.length > 0 && selectedIds.size === rows.length;
+  const someSelected = selectedIds.size > 0;
+
+  function toggleAll() {
+    if (allSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(rows.map((r) => r.id as number)));
+  }
+
+  function toggleRow(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  // ── CSV Export ───────────────────────────────────────────────────────────────
+  function exportCSV(exportRows: Row[]) {
+    if (!data || exportRows.length === 0) return;
+    const escape = (v: unknown) => {
+      if (v === null || v === undefined) return "";
+      const s = String(v);
+      return s.includes(",") || s.includes('"') || s.includes("\n")
+        ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = data.columns.join(",");
+    const body = exportRows.map((row) => data.columns.map((c) => escape(row[c])).join(","));
+    const csv = [header, ...body].join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${activeTable}${someSelected ? "_selected" : ""}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ── Delete ───────────────────────────────────────────────────────────────────
+  async function deleteRows(ids: number[]) {
+    if (ids.length === 0) return;
+    setDeleting(true);
+    setActionError("");
+    try {
+      await api.batchDeleteRows(activeTable, ids);
+      setSelectedIds((prev) => { const n = new Set(prev); ids.forEach((id) => n.delete(id)); return n; });
+      await load(activeTable);
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeleting(false);
     }
   }
 
-  const rows = data ? [...data.rows].sort((a, b) => {
-    if (!sortCol) return 0;
-    const av = a[sortCol] ?? "";
-    const bv = b[sortCol] ?? "";
-    const cmp = av < bv ? -1 : av > bv ? 1 : 0;
-    return sortAsc ? cmp : -cmp;
-  }) : [];
+  // ── Modal ────────────────────────────────────────────────────────────────────
+  function openAdd() {
+    setForm(EMPTY_FORM);
+    setModal({ mode: "add" });
+    setActionError("");
+  }
 
+  function openEdit(row: Row) {
+    setForm({
+      topic: String(row.topic ?? ""),
+      question: String(row.question ?? ""),
+      difficulty: String(row.difficulty ?? "Medium"),
+      company: String(row.company ?? ""),
+      category: String(row.category ?? ""),
+      expected_keywords: String(row.expected_keywords ?? ""),
+    });
+    setModal({ mode: "edit", row });
+    setActionError("");
+  }
+
+  async function handleSave() {
+    if (!modal) return;
+    setSaving(true);
+    setActionError("");
+    try {
+      const payload = {
+        topic: form.topic.trim(),
+        question: form.question.trim(),
+        difficulty: form.difficulty,
+        company: form.company.trim() || undefined,
+        category: form.category.trim() || undefined,
+        expected_keywords: form.expected_keywords.trim() || undefined,
+      };
+      if (modal.mode === "add") {
+        await api.createQuestion(payload);
+      } else if (modal.row) {
+        await api.updateQuestion(modal.row.id as number, payload);
+      }
+      setModal(null);
+      await load(activeTable);
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ── Cell formatting ──────────────────────────────────────────────────────────
   function formatCell(col: string, val: unknown): { text: string; cls: string } {
     if (val === null || val === undefined) return { text: "—", cls: "text-gray-600" };
-    if (typeof val === "string" && val.length > 120) {
+    if (typeof val === "string" && val.length > 120)
       return { text: val.slice(0, 120) + "…", cls: "text-gray-300" };
-    }
     if (SCORE_COLS.has(col) && typeof val === "number") {
       const cls = val >= 80 ? "text-green-400 font-semibold" : val >= 60 ? "text-yellow-400 font-semibold" : "text-red-400 font-semibold";
       return { text: val.toFixed(1), cls };
@@ -87,22 +217,53 @@ export default function DatabasePage() {
   }
 
   const active = TABLES.find((t) => t.name === activeTable)!;
+  const isQuestions = activeTable === "questions";
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
-      {/* Header */}
-      <div className="flex items-center gap-4 px-6 py-4 bg-gray-900 border-b border-gray-800">
+      {/* ── Header ── */}
+      <div className="flex items-center gap-4 px-6 py-4 bg-gray-900 border-b border-gray-800 flex-wrap">
         <button onClick={() => router.push("/dashboard")}
           className="flex items-center gap-2 text-gray-400 hover:text-white text-sm">
           <ArrowLeft size={16} />
         </button>
         <Database size={18} className="text-blue-400" />
-        <h1 className="text-base font-semibold">Database Viewer</h1>
+        <h1 className="text-base font-semibold">Database</h1>
         <span className="text-xs text-gray-500 font-mono">voicelearning.db</span>
-        <div className="ml-auto flex items-center gap-2">
-          {data && (
-            <span className="text-xs text-gray-500">{data.count} rows</span>
+
+        <div className="ml-auto flex items-center gap-2 flex-wrap">
+          {data && <span className="text-xs text-gray-500">{data.count} rows</span>}
+
+          {/* Add Question (questions table only) */}
+          {isQuestions && (
+            <button onClick={openAdd}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 text-white rounded-lg text-xs font-medium transition-colors">
+              <Plus size={13} /> Add Question
+            </button>
           )}
+
+          {/* Export CSV */}
+          <button
+            onClick={() => exportCSV(someSelected ? rows.filter((r) => selectedIds.has(r.id as number)) : rows)}
+            disabled={!data || rows.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-40 border border-gray-700 rounded-lg text-xs text-gray-300 transition-colors"
+          >
+            <Download size={13} />
+            {someSelected ? `Export ${selectedIds.size} rows` : "Export CSV"}
+          </button>
+
+          {/* Delete selected */}
+          {someSelected && (
+            <button
+              onClick={() => deleteRows([...selectedIds])}
+              disabled={deleting}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-900/50 hover:bg-red-800/60 disabled:opacity-40 border border-red-800 rounded-lg text-xs text-red-300 transition-colors"
+            >
+              <Trash2 size={13} />
+              {deleting ? "Deleting…" : `Delete ${selectedIds.size}`}
+            </button>
+          )}
+
           <button onClick={() => load(activeTable)}
             className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white">
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
@@ -110,8 +271,16 @@ export default function DatabasePage() {
         </div>
       </div>
 
+      {/* Error banner */}
+      {actionError && (
+        <div className="mx-4 mt-2 p-3 bg-red-900/30 border border-red-800 rounded-lg text-xs text-red-300 flex items-center justify-between">
+          {actionError}
+          <button onClick={() => setActionError("")}><X size={13} /></button>
+        </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar — table list */}
+        {/* ── Sidebar ── */}
         <div className="w-52 shrink-0 bg-gray-900 border-r border-gray-800 p-3 space-y-1">
           {TABLES.map((t) => (
             <button
@@ -129,7 +298,7 @@ export default function DatabasePage() {
           ))}
         </div>
 
-        {/* Main — table content */}
+        {/* ── Main ── */}
         <div className="flex-1 overflow-auto p-0">
           {loading && (
             <div className="flex items-center justify-center h-48 text-gray-500 text-sm">
@@ -140,8 +309,16 @@ export default function DatabasePage() {
           {!loading && data && data.rows.length === 0 && (
             <div className="flex flex-col items-center justify-center h-48 gap-2">
               <Database size={32} className="text-gray-700" />
-              <p className="text-gray-500 text-sm">No rows in <span className="text-gray-400 font-mono">{activeTable}</span> yet</p>
+              <p className="text-gray-500 text-sm">
+                No rows in <span className="text-gray-400 font-mono">{activeTable}</span> yet
+              </p>
               <p className="text-xs text-gray-600">Start a session to populate this table</p>
+              {isQuestions && (
+                <button onClick={openAdd}
+                  className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-600 rounded-lg text-xs text-white">
+                  <Plus size={12} /> Add first question
+                </button>
+              )}
             </div>
           )}
 
@@ -149,6 +326,15 @@ export default function DatabasePage() {
             <table className="w-full text-xs border-collapse">
               <thead className="sticky top-0 bg-gray-900 z-10">
                 <tr>
+                  {/* Select-all checkbox */}
+                  <th className="px-3 py-3 border-b border-gray-800 w-8">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      className="rounded border-gray-600 accent-blue-500 cursor-pointer"
+                    />
+                  </th>
                   {data.columns.map((col) => (
                     <th
                       key={col}
@@ -157,34 +343,184 @@ export default function DatabasePage() {
                     >
                       <span className="flex items-center gap-1">
                         {col}
-                        {sortCol === col ? (
-                          sortAsc ? <ChevronUp size={11} className="text-blue-400" /> : <ChevronDown size={11} className="text-blue-400" />
-                        ) : (
-                          <ChevronDown size={11} className="opacity-0 group-hover:opacity-30" />
-                        )}
+                        {sortCol === col
+                          ? sortAsc
+                            ? <ChevronUp size={11} className="text-blue-400" />
+                            : <ChevronDown size={11} className="text-blue-400" />
+                          : <ChevronDown size={11} className="opacity-0" />
+                        }
                       </span>
                     </th>
                   ))}
+                  <th className="px-3 py-3 border-b border-gray-800 text-gray-600 font-normal w-20 text-left">
+                    actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, i) => (
-                  <tr key={i} className={`border-b border-gray-800/50 hover:bg-gray-900/60 ${i % 2 === 0 ? "" : "bg-gray-900/20"}`}>
-                    {data.columns.map((col) => {
-                      const { text, cls } = formatCell(col, row[col]);
-                      return (
-                        <td key={col} className={`px-4 py-2.5 font-mono max-w-xs truncate ${cls}`} title={String(row[col] ?? "")}>
-                          {text}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
+                {rows.map((row, i) => {
+                  const rowId = row.id as number;
+                  const selected = selectedIds.has(rowId);
+                  return (
+                    <tr
+                      key={i}
+                      className={`border-b border-gray-800/50 hover:bg-gray-900/60 ${
+                        selected ? "bg-blue-950/30" : i % 2 === 0 ? "" : "bg-gray-900/20"
+                      }`}
+                    >
+                      {/* Row checkbox */}
+                      <td className="px-3 py-2.5 w-8">
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => toggleRow(rowId)}
+                          className="rounded border-gray-600 accent-blue-500 cursor-pointer"
+                        />
+                      </td>
+                      {data.columns.map((col) => {
+                        const { text, cls } = formatCell(col, row[col]);
+                        return (
+                          <td
+                            key={col}
+                            className={`px-4 py-2.5 font-mono max-w-xs truncate ${cls}`}
+                            title={String(row[col] ?? "")}
+                          >
+                            {text}
+                          </td>
+                        );
+                      })}
+                      {/* Actions */}
+                      <td className="px-3 py-2.5 w-20">
+                        <div className="flex items-center gap-0.5">
+                          {isQuestions && (
+                            <button
+                              onClick={() => openEdit(row)}
+                              className="p-1.5 rounded-lg text-gray-600 hover:text-blue-400 hover:bg-blue-900/20 transition-colors"
+                              title="Edit"
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => deleteRows([rowId])}
+                            disabled={deleting}
+                            className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-900/20 disabled:opacity-40 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
         </div>
       </div>
+
+      {/* ── Add / Edit Modal (questions only) ── */}
+      {modal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-base font-semibold">
+                {modal.mode === "add" ? "Add Question" : "Edit Question"}
+              </h2>
+              <button onClick={() => setModal(null)} className="text-gray-500 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-gray-400 mb-1.5 block">Topic *</label>
+                <input
+                  value={form.topic}
+                  onChange={(e) => setForm((f) => ({ ...f, topic: e.target.value }))}
+                  placeholder="e.g. System Design"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1.5 block">Question *</label>
+                <textarea
+                  value={form.question}
+                  onChange={(e) => setForm((f) => ({ ...f, question: e.target.value }))}
+                  placeholder="Enter the interview question…"
+                  rows={3}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600 resize-none"
+                />
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="text-xs text-gray-400 mb-1.5 block">Difficulty</label>
+                  <select
+                    value={form.difficulty}
+                    onChange={(e) => setForm((f) => ({ ...f, difficulty: e.target.value }))}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm"
+                  >
+                    <option>Easy</option>
+                    <option>Medium</option>
+                    <option>Hard</option>
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs text-gray-400 mb-1.5 block">Company</label>
+                  <input
+                    value={form.company}
+                    onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
+                    placeholder="e.g. Google"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1.5 block">Category</label>
+                <input
+                  value={form.category}
+                  onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                  placeholder="e.g. Algorithms"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1.5 block">Expected Keywords</label>
+                <input
+                  value={form.expected_keywords}
+                  onChange={(e) => setForm((f) => ({ ...f, expected_keywords: e.target.value }))}
+                  placeholder="e.g. consistency, CAP theorem, replication"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600"
+                />
+              </div>
+            </div>
+
+            {actionError && (
+              <p className="mt-3 text-xs text-red-400">{actionError}</p>
+            )}
+
+            <div className="flex items-center gap-3 mt-5">
+              <button
+                onClick={() => setModal(null)}
+                className="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 rounded-xl text-sm text-gray-300 border border-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving || !form.topic.trim() || !form.question.trim()}
+                className="flex-1 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm text-white font-medium flex items-center justify-center gap-2 transition-colors"
+              >
+                {saving
+                  ? <><Save size={14} className="animate-pulse" /> Saving…</>
+                  : <><Check size={14} /> {modal.mode === "add" ? "Add Question" : "Save Changes"}</>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

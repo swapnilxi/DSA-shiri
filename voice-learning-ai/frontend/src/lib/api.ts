@@ -122,6 +122,27 @@ export const api = {
   getGenerateHistory: () =>
     request<ResumeEntry[]>("/resume/history"),
 
+  createQuestion: (q: { topic: string; question: string; difficulty?: string; company?: string; category?: string; expected_keywords?: string }) =>
+    request<Record<string, unknown>>("/questions/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(q),
+    }),
+
+  updateQuestion: (id: number, q: { topic: string; question: string; difficulty?: string; company?: string; category?: string; expected_keywords?: string }) =>
+    request<Record<string, unknown>>(`/questions/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(q),
+    }),
+
+  batchDeleteRows: (table: string, ids: number[]) =>
+    request<{ deleted: number }>(`/progress/db/${table}/rows`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(ids),
+    }),
+
   getDbTable: (table: string, limit = 200) =>
     request<{ table: string; columns: string[]; rows: Record<string, unknown>[]; count: number }>(
       `/progress/db/${table}?limit=${limit}`

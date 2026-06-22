@@ -1,11 +1,12 @@
 """
-Question bank management — list, filter, and upload CSV question banks.
+Question bank management — list, filter, upload CSV, and CRUD.
 """
 import io
 import aiosqlite
 import pandas as pd
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 from typing import Optional
+from pydantic import BaseModel
 
 from config import settings
 from models.question import QuestionOut, QuestionFilter
@@ -17,6 +18,51 @@ DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", settings
 
 REQUIRED_COLUMNS = {"topic", "question"}
 OPTIONAL_COLUMNS = {"difficulty", "company", "category", "expected_keywords"}
+
+
+class QuestionIn(BaseModel):
+    topic: str
+    question: str
+    difficulty: Optional[str] = "Medium"
+    company: Optional[str] = None
+    category: Optional[str] = None
+    expected_keywords: Optional[str] = None
+
+
+@router.post("/", response_model=dict)
+async def create_question(body: QuestionIn):
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """INSERT INTO questions (topic, question, difficulty, company, category, expected_keywords)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (body.topic, body.question, body.difficulty or "Medium",
+             body.company or None, body.category or None, body.expected_keywords or None),
+        )
+        await db.commit()
+        row_id = cur.lastrowid
+        async with db.execute("SELECT * FROM questions WHERE id = ?", (row_id,)) as c:
+            return dict(await c.fetchone())
+
+
+@router.put("/{question_id}", response_model=dict)
+async def update_question(question_id: int, body: QuestionIn):
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        await db.execute(
+            """UPDATE questions
+               SET topic=?, question=?, difficulty=?, company=?, category=?, expected_keywords=?
+               WHERE id=?""",
+            (body.topic, body.question, body.difficulty or "Medium",
+             body.company or None, body.category or None, body.expected_keywords or None,
+             question_id),
+        )
+        await db.commit()
+        async with db.execute("SELECT * FROM questions WHERE id = ?", (question_id,)) as c:
+            row = await c.fetchone()
+    if not row:
+        raise HTTPException(404, "Question not found")
+    return dict(row)
 
 
 @router.get("/", response_model=list[dict])
@@ -36,8 +82,11 @@ async def list_questions(
         conditions.append("difficulty = ?")
         params.append(difficulty)
     if company:
-        conditions.append("company LIKE ?")
-        params.append(f"%{company}%")
+        conditions.append(
+            "(',' || REPLACE(LOWER(company), ' ', '') || ',') "
+            "LIKE ('%,' || REPLACE(LOWER(?), ' ', '') || ',%')"
+        )
+        params.append(company)
 
     sql = f"SELECT * FROM questions WHERE {' AND '.join(conditions)} LIMIT ?"
     params.append(limit)
@@ -61,14 +110,24 @@ async def list_topics():
 async def list_companies():
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute(
-            """SELECT company, COUNT(*) AS count
+            """SELECT company
                FROM questions
-               WHERE company IS NOT NULL AND TRIM(company) != ''
-               GROUP BY company
-               ORDER BY company"""
+               WHERE company IS NOT NULL AND TRIM(company) != ''"""
         ) as cur:
             rows = await cur.fetchall()
-    return [{"company": r[0], "count": r[1]} for r in rows]
+
+    counts: dict[str, dict[str, str | int]] = {}
+    for (raw_company,) in rows:
+        # A question may target multiple companies, stored as
+        # comma-separated tags such as "Apple, Google".
+        tags = {tag.strip() for tag in raw_company.split(",") if tag.strip()}
+        for tag in tags:
+            key = tag.casefold()
+            if key not in counts:
+                counts[key] = {"company": tag, "count": 0}
+            counts[key]["count"] = int(counts[key]["count"]) + 1
+
+    return sorted(counts.values(), key=lambda item: str(item["company"]).casefold())
 
 
 @router.post("/upload")
