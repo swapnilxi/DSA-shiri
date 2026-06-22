@@ -128,8 +128,7 @@ def _normalise(questions: list[dict]) -> list[dict]:
     return clean
 
 
-async def _run_llm(context: str, num_questions: int, difficulty: str, model: str) -> list[dict]:
-    messages = _build_messages(context, num_questions, difficulty)
+async def _run_llm_with_messages(messages: list[dict], model: str) -> list[dict]:
     try:
         raw_output = await chat(messages, model=model)
     except Exception as exc:
@@ -142,6 +141,48 @@ async def _run_llm(context: str, num_questions: int, difficulty: str, model: str
     if not clean:
         raise HTTPException(502, "LLM produced no valid questions.")
     return clean
+
+
+async def _run_llm(context: str, num_questions: int, difficulty: str, model: str) -> list[dict]:
+    messages = _build_messages(context, num_questions, difficulty)
+    return await _run_llm_with_messages(messages, model)
+
+
+def _build_messages_daily(context: str, categories: list[dict], difficulty: str) -> list[dict]:
+    category_breakdown = "\n".join(
+        f"  - {cat['name']}: {cat['count']} question{'s' if cat['count'] != 1 else ''}"
+        for cat in categories
+    )
+    total = sum(cat["count"] for cat in categories)
+    cat_names = ", ".join(repr(c["name"]) for c in categories)
+    diff_line = (
+        f"All questions must be {difficulty} difficulty."
+        if difficulty != "Mixed"
+        else "Use a mix of Easy, Medium, and Hard difficulties."
+    )
+    context_section = (
+        f"Use the following context to tailor the questions:\n{context[:MAX_CONTEXT_CHARS]}"
+        if context.strip()
+        else "Generate general interview questions appropriate for each category."
+    )
+    system = (
+        "You are an expert technical interviewer creating a daily practice question set. "
+        "Return ONLY a valid JSON array — no markdown, no extra text.\n"
+        "Each element must have exactly these keys:\n"
+        '  "topic"             – broad subject area\n'
+        '  "question"          – the interview question text\n'
+        '  "difficulty"        – "Easy" | "Medium" | "Hard"\n'
+        '  "category"          – MUST be exactly one of the category names listed in the request\n'
+        '  "expected_keywords" – comma-separated key concepts the answer should cover\n'
+    )
+    user = (
+        f"Generate exactly {total} interview questions for a daily practice session.\n"
+        f"Distribute them across these categories:\n{category_breakdown}\n\n"
+        f"IMPORTANT: The 'category' field for each question MUST exactly match one of: {cat_names}\n"
+        f"{diff_line}\n\n"
+        f"{context_section}"
+    )
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
 async def _save_questions_to_db(db: aiosqlite.Connection, questions: list[dict], source: str) -> tuple[int, int]:
@@ -241,6 +282,19 @@ class GenerateFromIdsRequest(BaseModel):
     difficulty: str = "Mixed"
     model: Optional[str] = None
     topics: Optional[str] = None
+
+
+class CategorySpec(BaseModel):
+    name: str
+    count: int
+
+
+class DailyPracticeRequest(BaseModel):
+    categories: list[CategorySpec]
+    context: Optional[str] = None
+    resume_ids: Optional[list[int]] = None
+    difficulty: str = "Mixed"
+    model: Optional[str] = None
 
 
 @router.post("/upload")
@@ -356,6 +410,58 @@ async def generate_from_source(
         "questions": clean,
         "inserted": inserted,
         "skipped": skipped,
+        "source": source,
+        "model_used": llm_model,
+    }
+
+
+@router.post("/daily-practice")
+async def generate_daily_practice(req: DailyPracticeRequest):
+    """Generate a set of questions distributed across selected categories for daily practice."""
+    if not req.categories:
+        raise HTTPException(400, "Provide at least one category.")
+
+    total = sum(c.count for c in req.categories)
+    if total < 1 or total > 60:
+        raise HTTPException(400, "Total questions must be between 1 and 60.")
+
+    llm_model = req.model or settings.ollama_model
+
+    # Build combined context from resume IDs + freetext
+    context_parts: list[str] = []
+
+    if req.resume_ids:
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            placeholders = ",".join("?" * len(req.resume_ids))
+            async with db.execute(
+                f"SELECT filename, parsed_text FROM resumes WHERE id IN ({placeholders})",
+                req.resume_ids,
+            ) as cur:
+                resume_rows = [dict(r) for r in await cur.fetchall()]
+        for r in resume_rows:
+            context_parts.append(f"[{r['filename']}]\n{r['parsed_text'] or ''}")
+
+    if req.context and req.context.strip():
+        context_parts.insert(0, f"[User Context]\n{req.context.strip()}")
+
+    combined_context = "\n\n---\n\n".join(context_parts)
+    categories_payload = [{"name": c.name, "count": c.count} for c in req.categories]
+
+    messages = _build_messages_daily(combined_context, categories_payload, req.difficulty)
+    clean = await _run_llm_with_messages(messages, llm_model)
+
+    source_parts = []
+    if req.context and req.context.strip():
+        source_parts.append("context")
+    if req.resume_ids:
+        source_parts.append(f"{len(req.resume_ids)} file(s)")
+    source = "daily-practice" + (f" ({', '.join(source_parts)})" if source_parts else "")
+
+    return {
+        "questions": clean,
+        "inserted": 0,
+        "skipped": 0,
         "source": source,
         "model_used": llm_model,
     }

@@ -1,8 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BarChart2, BookOpen, Mic, Upload, Zap, ChevronDown, Database, Sparkles } from "lucide-react";
-import { api, Stats, TopicMastery, Session } from "@/lib/api";
+import { BarChart2, BookOpen, Mic, Upload, Zap, ChevronDown, Database, Sparkles, RefreshCw, X } from "lucide-react";
+import { api, Stats, TopicMastery, Session, Question } from "@/lib/api";
 import { TopicRadar } from "@/components/dashboard/TopicRadar";
 
 interface ModelGroups {
@@ -16,6 +16,19 @@ const DEEPSEEK_LABELS: Record<string, string> = {
   "deepseek-chat": "DeepSeek V3 (Chat)",
   "deepseek-reasoner": "DeepSeek R1 (Reasoner)",
 };
+
+const DIFF_COLORS: Record<string, string> = {
+  Easy: "bg-green-900/50 text-green-300 border-green-800",
+  Medium: "bg-yellow-900/50 text-yellow-300 border-yellow-800",
+  Hard: "bg-red-900/50 text-red-300 border-red-800",
+};
+
+const BOARD_CATS = [
+  { id: "computer_vision",     label: "Computer Vision" },
+  { id: "real_life_scenario",  label: "Real-Life Scenario-Based" },
+  { id: "large_scale_system",  label: "Large Scale System" },
+  { id: "leadership_behavioral", label: "Leadership / Behavioral" },
+];
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -31,6 +44,20 @@ export default function DashboardPage() {
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState("");
+
+  // ── question bank board ───────────────────────────────────────────────────────
+  const [boardCats, setBoardCats] = useState<Set<string>>(new Set());
+  const [boardQuestions, setBoardQuestions] = useState<Question[]>([]);
+  const [boardLoading, setBoardLoading] = useState(false);
+
+  const fetchBoard = useCallback(async (cats: Set<string>) => {
+    setBoardLoading(true);
+    try {
+      const labels = BOARD_CATS.filter((c) => cats.has(c.id)).map((c) => c.label);
+      setBoardQuestions(await api.getRandomQuestions(labels.length > 0 ? labels : undefined));
+    } catch { /* ignore */ }
+    finally { setBoardLoading(false); }
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -48,12 +75,16 @@ export default function DashboardPage() {
         setTopics(t);
         setCompanies(c);
         setModelGroups(mg);
-        // Restore last used model from localStorage, fallback to server default
         const saved = localStorage.getItem("selectedModel");
         setSelectedModel(saved && [...mg.ollama, ...mg.deepseek].includes(saved) ? saved : mg.default);
       })
       .catch(() => {});
-  }, []);
+    fetchBoard(new Set());
+  }, [fetchBoard]);
+
+  useEffect(() => {
+    fetchBoard(boardCats);
+  }, [boardCats, fetchBoard]);
 
   function handleModelChange(model: string) {
     setSelectedModel(model);
@@ -237,7 +268,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           {/* Radar */}
           {mastery.length > 0 && (
             <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
@@ -277,6 +308,106 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* ── Question Bank Board ────────────────────────────────────────────── */}
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+              <Database size={14} className="text-blue-400" />
+              Question Bank
+              {boardQuestions.length > 0 && (
+                <span className="px-1.5 py-0.5 bg-gray-800 rounded text-xs text-gray-400">10 random</span>
+              )}
+            </h3>
+            <button
+              onClick={() => fetchBoard(boardCats)}
+              disabled={boardLoading}
+              className="p-1.5 rounded-lg text-gray-500 hover:text-blue-400 hover:bg-blue-900/20 disabled:opacity-40 transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw size={15} className={boardLoading ? "animate-spin" : ""} />
+            </button>
+          </div>
+
+          {/* Category filter pills */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            {BOARD_CATS.map((cat) => {
+              const active = boardCats.has(cat.id);
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => setBoardCats((p) => { const n = new Set(p); n.has(cat.id) ? n.delete(cat.id) : n.add(cat.id); return n; })}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    active
+                      ? "bg-blue-900/40 border-blue-700 text-blue-300"
+                      : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600 hover:text-gray-300"
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              );
+            })}
+            {boardCats.size > 0 && (
+              <button
+                onClick={() => setBoardCats(new Set())}
+                className="px-2 py-1.5 rounded-lg text-xs text-gray-600 hover:text-gray-400 border border-transparent hover:border-gray-700 transition-colors"
+              >
+                <X size={11} />
+              </button>
+            )}
+          </div>
+
+          {boardLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-14 bg-gray-800 rounded-xl animate-pulse border border-gray-700" />
+              ))}
+            </div>
+          ) : boardQuestions.length === 0 ? (
+            <div className="text-center py-8 text-gray-600 text-sm">
+              <Database size={28} className="mx-auto mb-2 opacity-40" />
+              No questions in the bank yet.{boardCats.size > 0 ? " Try clearing the category filter." : " Generate and save some questions first."}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {boardQuestions.map((q, i) => (
+                <div key={q.id} className="bg-gray-800 border border-gray-700 rounded-xl p-3">
+                  <div className="flex items-start gap-2">
+                    <span className="text-xs text-gray-600 font-mono shrink-0 mt-0.5 w-5">{i + 1}.</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                        {q.category && (
+                          <span className="text-xs font-medium text-purple-300 bg-purple-900/30 border border-purple-800 rounded px-1.5 py-0.5 truncate max-w-[160px]">
+                            {q.category}
+                          </span>
+                        )}
+                        <span className="text-xs font-medium text-blue-300 bg-blue-900/30 border border-blue-800/50 rounded px-1.5 py-0.5 truncate max-w-[120px]">
+                          {q.topic}
+                        </span>
+                        <span className={`text-xs font-medium border rounded px-1.5 py-0.5 ${DIFF_COLORS[q.difficulty]}`}>
+                          {q.difficulty}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-200 leading-snug line-clamp-2">{q.question}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {boardQuestions.length > 0 && (
+            <button
+              onClick={() => fetchBoard(boardCats)}
+              disabled={boardLoading}
+              className="mt-4 w-full flex items-center justify-center gap-2 py-2 border border-dashed border-gray-700 hover:border-blue-600 hover:text-blue-400 rounded-xl text-sm text-gray-500 disabled:opacity-40 transition-colors"
+            >
+              <RefreshCw size={13} />
+              {boardLoading ? "Loading…" : "Load another 10 random"}
+            </button>
+          )}
+        </div>
+
       </div>
     </div>
   );

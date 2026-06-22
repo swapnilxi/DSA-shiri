@@ -57,10 +57,35 @@ export const api = {
   listTopics: () => request<{ topic: string; count: number }[]>("/questions/topics"),
   listCompanies: () => request<{ company: string; count: number }[]>("/questions/companies"),
 
-  listQuestions: (params?: { topic?: string; difficulty?: string; limit?: number }) => {
+  listQuestions: (params?: { topic?: string; difficulty?: string; category?: string; limit?: number }) => {
     const qs = new URLSearchParams(params as Record<string, string>).toString();
     return request<Question[]>(`/questions${qs ? `?${qs}` : ""}`);
   },
+
+  getRandomQuestions: (categories?: string[], limit = 10) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (categories && categories.length > 0) params.set("categories", categories.join(","));
+    return request<Question[]>(`/questions/random?${params}`);
+  },
+
+  generateDailyPractice: (opts: {
+    categories: { name: string; count: number }[];
+    context?: string;
+    resume_ids?: number[];
+    difficulty: string;
+    model: string;
+  }) =>
+    request<{
+      questions: GeneratedQuestion[];
+      inserted: number;
+      skipped: number;
+      source: string;
+      model_used: string;
+    }>("/resume/daily-practice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(opts),
+    }),
 
   uploadQuestions: (file: File) => {
     const fd = new FormData();

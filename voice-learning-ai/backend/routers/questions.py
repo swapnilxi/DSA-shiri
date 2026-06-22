@@ -65,11 +65,42 @@ async def update_question(question_id: int, body: QuestionIn):
     return dict(row)
 
 
+@router.get("/random", response_model=list[dict])
+async def random_questions(
+    categories: Optional[str] = Query(None),  # comma-separated category names
+    limit: int = Query(10, le=50),
+):
+    """Return N random questions, optionally filtered by category (LIKE match on category or topic)."""
+    conditions = ["1=1"]
+    params: list = []
+
+    if categories:
+        cat_list = [c.strip() for c in categories.split(",") if c.strip()]
+        if cat_list:
+            cat_conditions = []
+            for cat in cat_list:
+                cat_conditions.append(
+                    "(LOWER(COALESCE(category,'')) LIKE ? OR LOWER(COALESCE(topic,'')) LIKE ?)"
+                )
+                params.extend([f"%{cat.lower()}%", f"%{cat.lower()}%"])
+            conditions.append(f"({' OR '.join(cat_conditions)})")
+
+    sql = f"SELECT * FROM questions WHERE {' AND '.join(conditions)} ORDER BY RANDOM() LIMIT ?"
+    params.append(limit)
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(sql, params) as cursor:
+            rows = await cursor.fetchall()
+    return [dict(r) for r in rows]
+
+
 @router.get("/", response_model=list[dict])
 async def list_questions(
     topic: Optional[str] = Query(None),
     difficulty: Optional[str] = Query(None),
     company: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
     limit: int = Query(50, le=200),
 ):
     conditions = ["1=1"]
@@ -87,6 +118,9 @@ async def list_questions(
             "LIKE ('%,' || REPLACE(LOWER(?), ' ', '') || ',%')"
         )
         params.append(company)
+    if category:
+        conditions.append("LOWER(COALESCE(category,'')) LIKE ?")
+        params.append(f"%{category.lower()}%")
 
     sql = f"SELECT * FROM questions WHERE {' AND '.join(conditions)} LIMIT ?"
     params.append(limit)
