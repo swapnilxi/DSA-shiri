@@ -1,0 +1,11 @@
+topic,question,difficulty,company,category,expected_keywords
+System Design,Design a URL shortener with analytics.,Hard,General,System Design,"base62 encoding,hash collision,redirection,analytics pipeline"
+System Design,Design a global leaderboard for a gaming app.,Hard,General,System Design,"sorted sets,Redis,sharding,eventual consistency"
+System Design,Design a type-ahead search for an e-commerce site.,Medium,General,System Design,"trie,inverted index,Elasticsearch,caching,ranking"
+System Design,Design a notification service supporting email SMS and push.,Hard,General,System Design,"pub-sub,fan-out,templates,retry,deduplication"
+System Design,Design a distributed message queue like Kafka.,Hard,General,System Design,"partitions,consumer groups,offset,replication,delivery guarantees"
+System Design,Design an online code judge like LeetCode.,Hard,General,System Design,"sandboxing,containers,judge workers,test cases,result storage"
+System Design,Design a flight booking system.,Hard,General,System Design,"seat locking,payment,idempotency,distributed lock,saga pattern"
+System Design,Design a content delivery network (CDN).,Hard,General,System Design,"PoPs,edge caching,origin pull,TTL,routing"
+System Design,Design a logging and monitoring system for microservices.,Medium,General,System Design,"log aggregation,ELK,metrics,alerts,tracing"
+System Design,How would you design a recommendation engine?,Hard,General,System Design,"collaborative filtering,content-based,embeddings,real-time vs batch"
