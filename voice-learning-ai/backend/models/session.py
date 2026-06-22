@@ -4,6 +4,8 @@ from datetime import datetime
 
 
 class SessionCreate(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
     topic: str
     company: Optional[str] = None
     title: Optional[str] = None
@@ -11,6 +13,8 @@ class SessionCreate(BaseModel):
 
 
 class SessionOut(BaseModel):
+    model_config = {"protected_namespaces": (), "from_attributes": True}
+
     id: int
     title: Optional[str]
     topic: str
@@ -19,6 +23,3 @@ class SessionOut(BaseModel):
     total_score: Optional[float]
     started_at: datetime
     ended_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True

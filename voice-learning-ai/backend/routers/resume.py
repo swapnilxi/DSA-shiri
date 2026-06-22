@@ -240,6 +240,25 @@ class GenerateFromIdsRequest(BaseModel):
     model: Optional[str] = None
 
 
+@router.post("/upload")
+async def upload_to_library(file: UploadFile = File(...)):
+    """Extract text from a file and save it to the resume library without generating questions."""
+    if not file.filename:
+        raise HTTPException(400, "No filename provided.")
+    raw_bytes = await file.read()
+    context = _extract_text(file.filename, raw_bytes)
+    if not context.strip():
+        raise HTTPException(400, "Could not extract any text from the file.")
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "INSERT INTO resumes (filename, parsed_text, questions_generated) VALUES (?, ?, ?)",
+            (file.filename, context[:MAX_STORED_CHARS], 0),
+        )
+        resume_id = cursor.lastrowid
+        await db.commit()
+    return {"id": resume_id, "filename": file.filename}
+
+
 @router.post("/generate-from-ids")
 async def generate_from_saved(req: GenerateFromIdsRequest):
     """Generate questions from one or more saved resumes by their IDs."""

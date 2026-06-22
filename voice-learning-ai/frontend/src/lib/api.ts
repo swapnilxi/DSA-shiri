@@ -93,6 +93,12 @@ export const api = {
   deleteResume: (id: number) =>
     request<{ deleted: number }>(`/resume/history/${id}`, { method: "DELETE" }),
 
+  uploadToLibrary: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<{ id: number; filename: string }>("/resume/upload", { method: "POST", body: fd });
+  },
+
   generateFromIds: (opts: {
     resume_ids: number[];
     num_questions: number;

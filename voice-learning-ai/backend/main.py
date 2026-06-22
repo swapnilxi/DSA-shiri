@@ -139,3 +139,8 @@ def _upsert_env(path: str, key: str, value: str) -> None:
         lines.append(f"{key}={value}\n")
     with open(path, "w") as f:
         f.writelines(lines)
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
