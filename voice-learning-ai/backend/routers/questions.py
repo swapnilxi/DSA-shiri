@@ -34,7 +34,7 @@ RANDOM_FILTER_ALIASES = {
         "dsa", "algorithms", "arrays", "dynamic programming", "graphs",
         "linked lists", "trees", "recursion", "tries", "trie",
     ],
-    "system design": ["system design"],
+    "system design": ["system design", "designing"],
     "computer vision": ["computer vision"],
     "real-life scenario-based": ["real-life scenario-based"],
     "large scale system": ["large scale system"],

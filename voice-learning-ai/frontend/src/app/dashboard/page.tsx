@@ -519,7 +519,15 @@ export default function DashboardPage() {
           {/* Category filter pills */}
           <div className="flex flex-wrap gap-2 mb-4">
             <button
-              onClick={fetchPracticeSet}
+              onClick={() => {
+                if (practiceMode) {
+                  setPracticeMode(false);
+                  setPracticeSetNumber(null);
+                  fetchBoard(new Set());
+                } else {
+                  fetchPracticeSet();
+                }
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                 practiceMode
                   ? "bg-purple-900/50 border-purple-700 text-purple-200"
@@ -548,9 +556,9 @@ export default function DashboardPage() {
                 </button>
               );
             })}
-            {boardCats.size > 0 && (
+            {(boardCats.size > 0 || practiceMode) && (
               <button
-                onClick={() => setBoardCats(new Set())}
+                onClick={() => { setPracticeMode(false); setPracticeSetNumber(null); setBoardCats(new Set()); fetchBoard(new Set()); }}
                 className="px-2 py-1.5 rounded-lg text-xs text-gray-600 hover:text-gray-400 border border-transparent hover:border-gray-700 transition-colors"
               >
                 <X size={11} />
