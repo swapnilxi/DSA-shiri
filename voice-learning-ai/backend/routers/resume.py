@@ -42,6 +42,13 @@ MAX_STORED_CHARS = 8000   # stored in DB for future regeneration
 MAX_CONTEXT_CHARS = 8000  # sent to LLM
 
 
+def _normalise_company(value: object) -> str:
+    company = str(value or "").strip()
+    if not company or company.casefold() in {"none", "null", "n/a", "na", "unknown"}:
+        return "General"
+    return company
+
+
 # ── text extraction ──────────────────────────────────────────────────────────
 
 def _extract_pdf(data: bytes) -> str:
@@ -125,7 +132,7 @@ def _normalise(questions: list[dict]) -> list[dict]:
             "topic": (q.get("topic") or "General").strip(),
             "question": text,
             "difficulty": diff,
-            "company": (q.get("company") or "General").strip(),
+            "company": _normalise_company(q.get("company")),
             "category": (q.get("category") or "").strip(),
             "expected_keywords": (q.get("expected_keywords") or "").strip(),
         })
@@ -478,6 +485,9 @@ async def generate_daily_practice(req: DailyPracticeRequest):
     if req.company and req.company != "all":
         for question in clean:
             question["company"] = req.company
+    else:
+        for question in clean:
+            question["company"] = _normalise_company(question.get("company"))
 
     source_parts = []
     if req.context and req.context.strip():

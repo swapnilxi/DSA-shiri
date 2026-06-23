@@ -225,6 +225,16 @@ export default function GeneratePage() {
     const a = document.createElement("a"); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url);
   }
 
+  function getDailyCSVName() {
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const yy = String(now.getFullYear()).slice(-2);
+    const key = `dailySetNo_${mm}_${yy}`;
+    const n = (parseInt(localStorage.getItem(key) ?? "0", 10)) + 1;
+    localStorage.setItem(key, String(n));
+    return `daily_practice_${mm}_${yy}_${n}.csv`;
+  }
+
   // ── daily practice ────────────────────────────────────────────────────────────
   const allDailyCats = [...DAILY_CATS, ...customCats];
   const enabledCats = allDailyCats.filter((c) => dailyCats[c.id]?.enabled);
@@ -286,7 +296,7 @@ export default function GeneratePage() {
             className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-0.5 text-sm text-white focus:outline-none focus:border-purple-500"
           />
         ) : (
-          <span className={`flex-1 text-sm ${state.enabled ? "text-gray-200" : "text-gray-400"}`}>{cat.label}</span>
+          <span className={`flex-1 leading-tight ${cat.label.length > 22 ? "text-xs" : "text-sm"} ${state.enabled ? "text-gray-200" : "text-gray-400"}`}>{cat.label}</span>
         )}
 
         {/* Count stepper (only when enabled) */}
@@ -663,7 +673,7 @@ export default function GeneratePage() {
               <h2 className="text-sm font-semibold text-gray-300 mb-1">Select categories</h2>
               <p className="text-xs text-gray-500 mb-4">Pick topics to practice and set the question count per category.</p>
 
-              <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
                 {/* Fixed categories */}
                 {DAILY_CATS.map((cat) => {
                   const state = dailyCats[cat.id];
@@ -774,7 +784,7 @@ export default function GeneratePage() {
               <Results
                 questions={dailyResult.questions} source={dailyResult.source} accent="bg-purple-700 hover:bg-purple-600 border border-purple-600"
                 onRemove={(i) => { setDailyResult((p) => p ? { ...p, questions: p.questions.filter((_, j) => j !== i) } : p); setDailySaveStatus(null); }}
-                onExport={() => exportCSV(dailyResult.questions, "daily_practice.csv")}
+                onExport={() => exportCSV(dailyResult.questions, getDailyCSVName())}
                 onSave={handleDailySave} saved={dailySaveStatus !== null} isSaving={dailySaving} ss={dailySaveStatus}
               />
             )}

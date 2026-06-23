@@ -176,6 +176,10 @@ export const api = {
 
   getSessions: () => request<Session[]>("/progress/sessions"),
   getSessionDetail: (id: number) => request<{ session: Session; responses: SessionResponse[] }>(`/progress/sessions/${id}`),
+  analyzeSession: (id: number, model?: string) => {
+    const qs = model ? `?model=${encodeURIComponent(model)}` : "";
+    return request<SessionAnalysis>(`/progress/sessions/${id}/analyze${qs}`, { method: "POST" });
+  },
   getMastery: () => request<TopicMastery[]>("/progress/mastery"),
   getStats: () => request<Stats>("/progress/stats"),
 };
@@ -237,6 +241,26 @@ export interface ResumeEntry {
   questions_generated: number;
   uploaded_at: string;
   preview?: string;
+}
+
+export interface SessionAnalysis {
+  summary: string;
+  strengths: string[];
+  weak_areas: {
+    topic: string;
+    reason: string;
+    study_topics: string[];
+    how_to_improve: string;
+  }[];
+  per_question: {
+    index: number;
+    score: number;
+    what_was_good: string;
+    what_was_missing: string;
+    ideal_outline: string;
+  }[];
+  learning_plan: { priority: number; action: string }[];
+  readiness: "Strong" | "Needs Work" | "Not Ready";
 }
 
 export interface Stats {

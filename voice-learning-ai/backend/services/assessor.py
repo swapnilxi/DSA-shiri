@@ -95,6 +95,73 @@ async def generate_encouragement(score: float, model: str | None = None) -> str:
     ], model=model)
 
 
+SESSION_ANALYSIS_SYSTEM = """You are a senior FAANG engineering coach reviewing a mock interview session.
+Analyse ALL questions and answers together and return a single JSON object — no extra text."""
+
+SESSION_ANALYSIS_TEMPLATE = """Session topic: {topic}
+
+Questions and answers:
+{qa_block}
+
+Return ONLY valid JSON with this structure:
+{{
+  "summary": "<2-3 sentences: overall impression, what the candidate did well and where they fell short>",
+  "strengths": ["<specific strength 1>", "<specific strength 2>"],
+  "weak_areas": [
+    {{
+      "topic": "<topic name>",
+      "reason": "<why this area was weak based on their answers>",
+      "study_topics": ["<concept/algo/system to study>", ...],
+      "how_to_improve": "<concrete advice: what to practice, what to build>"
+    }}
+  ],
+  "per_question": [
+    {{
+      "index": <0-based>,
+      "score": <total score 0-100>,
+      "what_was_good": "<what the candidate got right>",
+      "what_was_missing": "<key concepts/points they skipped>",
+      "ideal_outline": "<bullet-style outline of a strong answer: point A; point B; point C>"
+    }}
+  ],
+  "learning_plan": [
+    {{ "priority": 1, "action": "<most important thing to study/practice next>" }},
+    {{ "priority": 2, "action": "<second most important>" }},
+    {{ "priority": 3, "action": "<third>" }}
+  ],
+  "readiness": "Strong" | "Needs Work" | "Not Ready"
+}}"""
+
+
+async def analyze_session(
+    topic: str,
+    responses: list[dict],
+    model: str | None = None,
+) -> dict:
+    """Generate a comprehensive post-session learning report."""
+    qa_lines = []
+    for i, r in enumerate(responses):
+        score_str = f"{r.get('total', '?')}/100" if r.get('total') is not None else "not scored"
+        qa_lines.append(
+            f"Q{i+1} [{r.get('topic', topic)} | {r.get('difficulty', '?')} | {score_str}]:\n"
+            f"  Question: {r.get('question', '')}\n"
+            f"  Answer:   {r.get('transcript') or '(no answer given)'}\n"
+            f"  Feedback: {r.get('llm_feedback') or '(none)'}"
+        )
+
+    prompt = SESSION_ANALYSIS_TEMPLATE.format(
+        topic=topic,
+        qa_block="\n\n".join(qa_lines),
+    )
+
+    raw = await chat([
+        {"role": "system", "content": SESSION_ANALYSIS_SYSTEM},
+        {"role": "user", "content": prompt},
+    ], model=model)
+
+    return json.loads(_extract_json(raw))
+
+
 def _extract_json(text: str) -> str:
     match = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", text)
     if match:

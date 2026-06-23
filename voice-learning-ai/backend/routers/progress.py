@@ -3,9 +3,10 @@ Progress tracking — session history, topic mastery, score trends.
 """
 import aiosqlite
 import os
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Query
 
 from config import settings
+from services.assessor import analyze_session
 
 router = APIRouter(prefix="/progress", tags=["progress"])
 
@@ -46,6 +47,46 @@ async def get_session_detail(session_id: int):
             responses = [dict(r) for r in await cur.fetchall()]
 
     return {"session": session, "responses": responses}
+
+
+@router.post("/sessions/{session_id}/analyze")
+async def analyze_session_endpoint(
+    session_id: int,
+    model: str = Query(default=None),
+):
+    """Run a deep post-session AI analysis: strengths, weak areas, per-question ideal answers, learning plan."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        async with db.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)) as cur:
+            session_row = await cur.fetchone()
+        if not session_row:
+            raise HTTPException(404, "Session not found")
+        session = dict(session_row)
+
+        async with db.execute(
+            """SELECT r.id, q.topic, q.question, q.difficulty,
+                      r.transcript,
+                      s.total, s.technical_correctness, s.depth_completeness,
+                      s.communication_clarity, s.problem_solving, s.llm_feedback
+               FROM responses r
+               JOIN questions q ON q.id = r.question_id
+               LEFT JOIN scores s ON s.response_id = r.id
+               WHERE r.session_id = ?
+               ORDER BY r.question_order""",
+            (session_id,),
+        ) as cur:
+            responses = [dict(r) for r in await cur.fetchall()]
+
+    if not responses:
+        raise HTTPException(400, "No responses found for this session")
+
+    result = await analyze_session(
+        topic=session.get("topic", "General"),
+        responses=responses,
+        model=model or None,
+    )
+    return result
 
 
 @router.get("/mastery")
