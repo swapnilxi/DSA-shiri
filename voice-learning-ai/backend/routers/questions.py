@@ -19,6 +19,29 @@ DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", settings
 REQUIRED_COLUMNS = {"topic", "question"}
 OPTIONAL_COLUMNS = {"difficulty", "company", "category", "expected_keywords"}
 
+PRACTICE_SET_SLOTS = [
+    ("DSA", 1, ["dsa", "algorithms", "arrays", "dynamic programming", "graphs", "linked lists", "trees", "recursion", "tries"]),
+    ("System Design", 1, ["system design"]),
+    ("Real-Life Scenario-Based", 1, ["real-life scenario-based"]),
+    ("Large Scale System", 1, ["large scale system"]),
+    ("Leadership / Behavioral", 1, ["leadership", "behavioral"]),
+    ("Python", 1, ["python"]),
+    ("Computer Vision", 3, ["computer vision"]),
+]
+
+RANDOM_FILTER_ALIASES = {
+    "dsa": [
+        "dsa", "algorithms", "arrays", "dynamic programming", "graphs",
+        "linked lists", "trees", "recursion", "tries", "trie",
+    ],
+    "system design": ["system design"],
+    "computer vision": ["computer vision"],
+    "real-life scenario-based": ["real-life scenario-based"],
+    "large scale system": ["large scale system"],
+    "leadership / behavioral": ["leadership", "behavioral"],
+    "python": ["python"],
+}
+
 
 class QuestionIn(BaseModel):
     topic: str
@@ -79,10 +102,14 @@ async def random_questions(
         if cat_list:
             cat_conditions = []
             for cat in cat_list:
-                cat_conditions.append(
-                    "(LOWER(COALESCE(category,'')) LIKE ? OR LOWER(COALESCE(topic,'')) LIKE ?)"
-                )
-                params.extend([f"%{cat.lower()}%", f"%{cat.lower()}%"])
+                aliases = RANDOM_FILTER_ALIASES.get(cat.casefold(), [cat])
+                alias_conditions = []
+                for alias in aliases:
+                    alias_conditions.append(
+                        "(LOWER(COALESCE(category,'')) LIKE ? OR LOWER(COALESCE(topic,'')) LIKE ?)"
+                    )
+                    params.extend([f"%{alias.lower()}%", f"%{alias.lower()}%"])
+                cat_conditions.append(f"({' OR '.join(alias_conditions)})")
             conditions.append(f"({' OR '.join(cat_conditions)})")
 
     sql = f"SELECT * FROM questions WHERE {' AND '.join(conditions)} ORDER BY RANDOM() LIMIT ?"
@@ -93,6 +120,77 @@ async def random_questions(
         async with db.execute(sql, params) as cursor:
             rows = await cursor.fetchall()
     return [dict(r) for r in rows]
+
+
+@router.get("/practice-set", response_model=list[dict])
+async def practice_set():
+    """Return the fixed 10-question daily practice distribution."""
+    selected: list[dict] = []
+    selected_ids: set[int] = set()
+    missing: list[str] = []
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        for label, count, aliases in PRACTICE_SET_SLOTS:
+            conditions = []
+            params: list = []
+            for alias in aliases:
+                conditions.append(
+                    "(LOWER(COALESCE(category,'')) LIKE ? OR LOWER(COALESCE(topic,'')) LIKE ?)"
+                )
+                params.extend([f"%{alias.lower()}%", f"%{alias.lower()}%"])
+
+            excluded = ""
+            if selected_ids:
+                placeholders = ",".join("?" * len(selected_ids))
+                excluded = f" AND id NOT IN ({placeholders})"
+                params.extend(selected_ids)
+            if label == "System Design":
+                excluded += (
+                    " AND LOWER(COALESCE(category,'')) NOT LIKE '%large scale%'"
+                    " AND LOWER(COALESCE(topic,'')) NOT LIKE '%large scale%'"
+                )
+            params.append(count)
+
+            async with db.execute(
+                f"""SELECT * FROM questions
+                    WHERE ({' OR '.join(conditions)}){excluded}
+                    ORDER BY RANDOM() LIMIT ?""",
+                params,
+            ) as cursor:
+                rows = [dict(row) for row in await cursor.fetchall()]
+
+            if len(rows) < count:
+                missing.append(f"{label} ({count - len(rows)} missing)")
+                continue
+
+            for row in rows:
+                row["practice_category"] = label
+                selected.append(row)
+                selected_ids.add(row["id"])
+
+        if missing:
+            raise HTTPException(
+                409,
+                "Cannot build the 10-question Practice Set. Add questions for: "
+                + ", ".join(missing),
+            )
+
+        placeholders = ",".join("?" * len(selected_ids))
+        async with db.execute(
+            f"SELECT * FROM questions WHERE id NOT IN ({placeholders}) ORDER BY RANDOM() LIMIT 1",
+            list(selected_ids),
+        ) as cursor:
+            random_row = await cursor.fetchone()
+
+    if not random_row:
+        raise HTTPException(409, "Cannot add the final random question.")
+
+    random_question = dict(random_row)
+    random_question["practice_category"] = "Random"
+    selected.append(random_question)
+    return selected
 
 
 @router.get("/", response_model=list[dict])

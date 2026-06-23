@@ -21,3 +21,4 @@ Behavioral,What's the most innovative thing you've built? Walk me through it.,Ha
 Operating Systems,Explain the page replacement algorithms and when to use each.,Medium,Google,OS,"LRU,LFU,clock algorithm,working set"
 Databases,Explain ACID properties with real-world examples.,Medium,Amazon,Databases,"atomicity,consistency,isolation,durability"
 Networking,How does HTTP/2 differ from HTTP/1.1?,Medium,Google,Networking,"multiplexing,header compression,server push,streams"
+Python,Explain Python's Global Interpreter Lock and how it affects multithreaded programs.,Medium,General,Python,"GIL,threads,multiprocessing,I/O-bound,CPU-bound"

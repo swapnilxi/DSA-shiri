@@ -68,6 +68,8 @@ export const api = {
     return request<Question[]>(`/questions/random?${params}`);
   },
 
+  getPracticeSet: () => request<Question[]>("/questions/practice-set"),
+
   generateDailyPractice: (opts: {
     categories: { name: string; count: number }[];
     company?: string;
@@ -191,6 +193,7 @@ export interface Question {
   difficulty: "Easy" | "Medium" | "Hard";
   company?: string;
   category?: string;
+  practice_category?: string;
 }
 
 export interface Session {

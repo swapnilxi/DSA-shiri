@@ -1,7 +1,10 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BarChart2, BookOpen, Mic, Upload, Zap, ChevronDown, Database, Sparkles, RefreshCw, X } from "lucide-react";
+import {
+  BarChart2, BookOpen, Mic, Upload, Zap, ChevronDown, Database,
+  Sparkles, RefreshCw, X, Download, FileText,
+} from "lucide-react";
 import { api, Stats, TopicMastery, Session, Question } from "@/lib/api";
 import { TopicRadar } from "@/components/dashboard/TopicRadar";
 
@@ -24,11 +27,93 @@ const DIFF_COLORS: Record<string, string> = {
 };
 
 const BOARD_CATS = [
+  { id: "dsa",                 label: "DSA" },
+  { id: "system_design",       label: "System Design" },
   { id: "computer_vision",     label: "Computer Vision" },
   { id: "real_life_scenario",  label: "Real-Life Scenario-Based" },
   { id: "large_scale_system",  label: "Large Scale System" },
   { id: "leadership_behavioral", label: "Leadership / Behavioral" },
 ];
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildSimplePdf(inputLines: string[]) {
+  const sanitise = (text: string) =>
+    text.normalize("NFKD").replace(/[^\x20-\x7E]/g, "?");
+  const escapePdf = (text: string) =>
+    sanitise(text).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+  const wrap = (text: string, max = 88) => {
+    if (!text) return [""];
+    const words = text.split(/\s+/);
+    const lines: string[] = [];
+    let line = "";
+    for (const word of words) {
+      if (!line) line = word;
+      else if (`${line} ${word}`.length <= max) line += ` ${word}`;
+      else {
+        lines.push(line);
+        line = word;
+      }
+    }
+    if (line) lines.push(line);
+    return lines;
+  };
+
+  const wrapped = inputLines.flatMap((line) => wrap(line));
+  const pages: string[][] = [];
+  for (let index = 0; index < wrapped.length; index += 48) {
+    pages.push(wrapped.slice(index, index + 48));
+  }
+
+  const objects: string[] = ["", "", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];
+  const pageObjectIds: number[] = [];
+
+  for (const pageLines of pages) {
+    const content = [
+      "BT",
+      "/F1 10 Tf",
+      "50 790 Td",
+      "14 TL",
+      ...pageLines.flatMap((line, index) => [
+        `(${escapePdf(line)}) Tj`,
+        ...(index < pageLines.length - 1 ? ["T*"] : []),
+      ]),
+      "ET",
+    ].join("\n");
+    const pageId = objects.length + 1;
+    const contentId = pageId + 1;
+    pageObjectIds.push(pageId);
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentId} 0 R >>`,
+      `<< /Length ${new TextEncoder().encode(content).length} >>\nstream\n${content}\nendstream`,
+    );
+  }
+
+  objects[0] = "<< /Type /Catalog /Pages 2 0 R >>";
+  objects[1] = `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageObjectIds.length} >>`;
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  for (let index = 0; index < objects.length; index++) {
+    offsets.push(new TextEncoder().encode(pdf).length);
+    pdf += `${index + 1} 0 obj\n${objects[index]}\nendobj\n`;
+  }
+  const xrefOffset = new TextEncoder().encode(pdf).length;
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  for (const offset of offsets.slice(1)) {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return new Blob([pdf], { type: "application/pdf" });
+}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -49,15 +134,100 @@ export default function DashboardPage() {
   const [boardCats, setBoardCats] = useState<Set<string>>(new Set());
   const [boardQuestions, setBoardQuestions] = useState<Question[]>([]);
   const [boardLoading, setBoardLoading] = useState(false);
+  const [boardError, setBoardError] = useState("");
+  const [practiceMode, setPracticeMode] = useState(false);
+  const [practiceSetNumber, setPracticeSetNumber] = useState<number | null>(null);
 
   const fetchBoard = useCallback(async (cats: Set<string>) => {
+    setPracticeMode(false);
+    setPracticeSetNumber(null);
+    setBoardError("");
     setBoardLoading(true);
     try {
       const labels = BOARD_CATS.filter((c) => cats.has(c.id)).map((c) => c.label);
       setBoardQuestions(await api.getRandomQuestions(labels.length > 0 ? labels : undefined));
-    } catch { /* ignore */ }
+    } catch (error: unknown) {
+      setBoardError(error instanceof Error ? error.message : "Could not load questions.");
+    }
     finally { setBoardLoading(false); }
   }, []);
+
+  function nextPracticeSetNumber() {
+    const now = new Date();
+    const dateKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+    const storageKey = "dailyPracticeSetCounter";
+    let counter = { date: dateKey, count: 0 };
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved) as { date?: string; count?: number };
+        if (parsed.date === dateKey) counter = { date: dateKey, count: parsed.count ?? 0 };
+      }
+    } catch { /* start from zero */ }
+    counter.count += 1;
+    localStorage.setItem(storageKey, JSON.stringify(counter));
+    return counter.count;
+  }
+
+  async function fetchPracticeSet() {
+    setBoardLoading(true);
+    setBoardError("");
+    try {
+      const questions = await api.getPracticeSet();
+      setBoardQuestions(questions);
+      setBoardCats(new Set());
+      setPracticeMode(true);
+      setPracticeSetNumber(nextPracticeSetNumber());
+    } catch (error: unknown) {
+      setPracticeMode(false);
+      setPracticeSetNumber(null);
+      setBoardError(error instanceof Error ? error.message : "Could not build the Practice Set.");
+    } finally {
+      setBoardLoading(false);
+    }
+  }
+
+  function practiceFilename(extension: "csv" | "pdf") {
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, "0");
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const year = String(now.getFullYear()).slice(-2);
+    return `Daily_practice_set_${day}_${month}_${year}_set_${practiceSetNumber ?? 1}.${extension}`;
+  }
+
+  function exportPracticeCSV() {
+    const escape = (value: unknown) => {
+      const text = String(value ?? "");
+      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const rows = boardQuestions.map((question, index) => [
+      index + 1,
+      question.practice_category ?? "",
+      question.topic,
+      question.question,
+      question.difficulty,
+      question.company ?? "General",
+      question.category ?? "",
+    ]);
+    const csv = [
+      ["number", "practice_category", "topic", "question", "difficulty", "company", "category"],
+      ...rows,
+    ].map((row) => row.map(escape).join(",")).join("\n");
+    downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), practiceFilename("csv"));
+  }
+
+  function exportPracticePDF() {
+    const lines = [
+      `Daily Practice Set ${practiceSetNumber ?? 1}`,
+      "",
+      ...boardQuestions.flatMap((question, index) => [
+        `${index + 1}. [${question.practice_category ?? "Random"}] ${question.question}`,
+        `   Topic: ${question.topic} | Difficulty: ${question.difficulty} | Company: ${question.company ?? "General"}`,
+        "",
+      ]),
+    ];
+    downloadBlob(buildSimplePdf(lines), practiceFilename("pdf"));
+  }
 
   useEffect(() => {
     Promise.all([
@@ -83,8 +253,9 @@ export default function DashboardPage() {
   }, [fetchBoard]);
 
   useEffect(() => {
+    if (practiceMode) return;
     fetchBoard(boardCats);
-  }, [boardCats, fetchBoard]);
+  }, [boardCats, fetchBoard, practiceMode]);
 
   function handleModelChange(model: string) {
     setSelectedModel(model);
@@ -316,27 +487,57 @@ export default function DashboardPage() {
               <Database size={14} className="text-blue-400" />
               Question Bank
               {boardQuestions.length > 0 && (
-                <span className="px-1.5 py-0.5 bg-gray-800 rounded text-xs text-gray-400">10 random</span>
+                <span className="px-1.5 py-0.5 bg-gray-800 rounded text-xs text-gray-400">
+                  {practiceMode ? `Practice Set ${practiceSetNumber}` : "10 random"}
+                </span>
               )}
             </h3>
-            <button
-              onClick={() => fetchBoard(boardCats)}
-              disabled={boardLoading}
-              className="p-1.5 rounded-lg text-gray-500 hover:text-blue-400 hover:bg-blue-900/20 disabled:opacity-40 transition-colors"
-              title="Refresh"
-            >
-              <RefreshCw size={15} className={boardLoading ? "animate-spin" : ""} />
-            </button>
+            <div className="flex items-center gap-2">
+              {practiceMode && boardQuestions.length === 10 && (
+                <>
+                  <button onClick={exportPracticeCSV}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-xs text-gray-300">
+                    <Download size={12} /> CSV
+                  </button>
+                  <button onClick={exportPracticePDF}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-xs text-gray-300">
+                    <FileText size={12} /> PDF
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => practiceMode ? fetchPracticeSet() : fetchBoard(boardCats)}
+                disabled={boardLoading}
+                className="p-1.5 rounded-lg text-gray-500 hover:text-blue-400 hover:bg-blue-900/20 disabled:opacity-40 transition-colors"
+                title="Refresh"
+              >
+                <RefreshCw size={15} className={boardLoading ? "animate-spin" : ""} />
+              </button>
+            </div>
           </div>
 
           {/* Category filter pills */}
           <div className="flex flex-wrap gap-2 mb-4">
+            <button
+              onClick={fetchPracticeSet}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                practiceMode
+                  ? "bg-purple-900/50 border-purple-700 text-purple-200"
+                  : "bg-gray-800 border-gray-700 text-gray-400 hover:border-purple-700 hover:text-purple-300"
+              }`}
+            >
+              Practice Set
+            </button>
             {BOARD_CATS.map((cat) => {
               const active = boardCats.has(cat.id);
               return (
                 <button
                   key={cat.id}
-                  onClick={() => setBoardCats((p) => { const n = new Set(p); n.has(cat.id) ? n.delete(cat.id) : n.add(cat.id); return n; })}
+                  onClick={() => {
+                    setPracticeMode(false);
+                    setPracticeSetNumber(null);
+                    setBoardCats((p) => { const n = new Set(p); n.has(cat.id) ? n.delete(cat.id) : n.add(cat.id); return n; });
+                  }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                     active
                       ? "bg-blue-900/40 border-blue-700 text-blue-300"
@@ -356,6 +557,12 @@ export default function DashboardPage() {
               </button>
             )}
           </div>
+
+          {boardError && (
+            <div className="mb-4 px-3 py-2 bg-red-950/40 border border-red-900 rounded-lg text-sm text-red-300">
+              {boardError}
+            </div>
+          )}
 
           {boardLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -381,6 +588,11 @@ export default function DashboardPage() {
                             {q.category}
                           </span>
                         )}
+                        {practiceMode && q.practice_category && (
+                          <span className="text-xs font-medium text-amber-300 bg-amber-900/30 border border-amber-800 rounded px-1.5 py-0.5">
+                            {q.practice_category}
+                          </span>
+                        )}
                         <span className="text-xs font-medium text-blue-300 bg-blue-900/30 border border-blue-800/50 rounded px-1.5 py-0.5 truncate max-w-[120px]">
                           {q.topic}
                         </span>
@@ -398,12 +610,12 @@ export default function DashboardPage() {
 
           {boardQuestions.length > 0 && (
             <button
-              onClick={() => fetchBoard(boardCats)}
+              onClick={() => practiceMode ? fetchPracticeSet() : fetchBoard(boardCats)}
               disabled={boardLoading}
               className="mt-4 w-full flex items-center justify-center gap-2 py-2 border border-dashed border-gray-700 hover:border-blue-600 hover:text-blue-400 rounded-xl text-sm text-gray-500 disabled:opacity-40 transition-colors"
             >
               <RefreshCw size={13} />
-              {boardLoading ? "Loading…" : "Load another 10 random"}
+              {boardLoading ? "Loading…" : practiceMode ? "Generate next Practice Set" : "Load another 10 random"}
             </button>
           )}
         </div>
