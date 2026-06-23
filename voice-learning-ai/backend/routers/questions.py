@@ -181,12 +181,19 @@ async def upload_question_bank(file: UploadFile = File(...)):
 
     df.columns = df.columns.str.lower()
 
+    # Drop rows where required columns are blank
+    df["topic"]    = df["topic"].astype(str).str.strip()
+    df["question"] = df["question"].astype(str).str.strip()
+    df = df[(df["topic"] != "") & (df["topic"] != "nan") & (df["question"] != "") & (df["question"] != "nan")]
+
     # Fill optional columns with defaults
     for col in OPTIONAL_COLUMNS:
         if col not in df.columns:
             df[col] = None
     if "difficulty" in df.columns:
-        df["difficulty"] = df["difficulty"].fillna("Medium")
+        df["difficulty"] = df["difficulty"].fillna("Medium").replace("", "Medium")
+    else:
+        df["difficulty"] = "Medium"
 
     rows = df[["topic", "question", "difficulty", "company", "category", "expected_keywords"]].to_dict("records")
     inserted = 0

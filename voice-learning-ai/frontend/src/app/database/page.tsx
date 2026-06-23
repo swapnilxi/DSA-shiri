@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Database, RefreshCw, ChevronUp, ChevronDown,
-  Download, Trash2, Plus, Edit2, X, Save, Check,
+  Download, Trash2, Plus, Edit2, X, Save, Check, Upload, FileText, CheckCircle2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -65,8 +65,15 @@ export default function DatabasePage() {
 
   // CRUD modal (questions only)
   const [modal, setModal] = useState<{ mode: "add" | "edit"; row?: Row } | null>(null);
+  const [modalTab, setModalTab] = useState<"single" | "csv">("single");
   const [form, setForm] = useState<QuestionForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+
+  // CSV bulk upload state
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvUploading, setCsvUploading] = useState(false);
+  const [csvResult, setCsvResult] = useState<{ inserted: number; filename: string } | null>(null);
+  const [csvDragOver, setCsvDragOver] = useState(false);
 
   // Action state
   const [deleting, setDeleting] = useState(false);
@@ -206,7 +213,25 @@ export default function DatabasePage() {
   function openAdd() {
     setForm(EMPTY_FORM);
     setModal({ mode: "add" });
+    setModalTab("single");
+    setCsvFile(null);
+    setCsvResult(null);
     setActionError("");
+  }
+
+  async function handleCsvUpload() {
+    if (!csvFile) return;
+    setCsvUploading(true);
+    setActionError("");
+    try {
+      const result = await api.uploadQuestions(csvFile);
+      setCsvResult(result);
+      await load(activeTable);
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCsvUploading(false);
+    }
   }
 
   function openEdit(row: Row) {
@@ -404,10 +429,10 @@ export default function DatabasePage() {
                     <th
                       key={col}
                       onClick={() => toggleSort(col)}
-                      className="relative text-left px-4 py-3 text-gray-400 font-medium border-b border-gray-800 cursor-pointer hover:text-gray-200 whitespace-nowrap select-none"
+                      className="relative text-left px-4 py-3 text-gray-400 text-xs font-semibold uppercase tracking-wider border-b border-gray-800 cursor-pointer hover:text-gray-200 whitespace-nowrap select-none"
                     >
                       <span className="flex items-center gap-1">
-                        {col}
+                        {col.replace(/_/g, " ")}
                         {sortCol === col
                           ? sortAsc
                             ? <ChevronUp size={11} className="text-blue-400" />
@@ -423,8 +448,8 @@ export default function DatabasePage() {
                       />
                     </th>
                   ))}
-                  <th className="px-3 py-3 border-b border-gray-800 text-gray-600 font-normal w-20 text-left">
-                    actions
+                  <th className="px-3 py-3 border-b border-gray-800 text-gray-600 text-xs font-semibold uppercase tracking-wider w-20 text-left">
+                    Actions
                   </th>
                 </tr>
               </thead>
@@ -451,10 +476,11 @@ export default function DatabasePage() {
                       {data.columns.map((col) => {
                         const { text, cls } = formatCell(col, row[col]);
                         const wrapQuestion = isQuestions && col === "question";
+                        const isMono = col === "id" || col.endsWith("_id");
                         return (
                           <td
                             key={col}
-                            className={`px-4 py-2.5 font-mono ${cls} ${
+                            className={`px-4 py-2.5 ${isMono ? "font-mono text-[11px]" : "text-[13px]"} ${cls} ${
                               wrapQuestion
                                 ? "whitespace-normal break-words leading-relaxed"
                                 : "overflow-hidden text-ellipsis whitespace-nowrap"
@@ -499,100 +525,266 @@ export default function DatabasePage() {
       {/* ── Add / Edit Modal (questions only) ── */}
       {modal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg p-6 shadow-2xl">
-            <div className="flex items-center justify-between mb-5">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-6 pt-5 pb-4">
               <h2 className="text-base font-semibold">
-                {modal.mode === "add" ? "Add Question" : "Edit Question"}
+                {modal.mode === "edit" ? "Edit Question" : "Add Question"}
               </h2>
               <button onClick={() => setModal(null)} className="text-gray-500 hover:text-white">
                 <X size={18} />
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs text-gray-400 mb-1.5 block">Topic *</label>
-                <input
-                  value={form.topic}
-                  onChange={(e) => setForm((f) => ({ ...f, topic: e.target.value }))}
-                  placeholder="e.g. System Design"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600"
-                />
+            {/* Tabs — only in add mode */}
+            {modal.mode === "add" && (
+              <div className="flex gap-1 px-6 pb-4">
+                <button
+                  onClick={() => { setModalTab("single"); setActionError(""); setCsvResult(null); }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    modalTab === "single"
+                      ? "bg-blue-700/30 border border-blue-700/60 text-blue-300"
+                      : "text-gray-500 hover:text-gray-300"
+                  }`}
+                >
+                  <Plus size={13} /> Single
+                </button>
+                <button
+                  onClick={() => { setModalTab("csv"); setActionError(""); }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    modalTab === "csv"
+                      ? "bg-blue-700/30 border border-blue-700/60 text-blue-300"
+                      : "text-gray-500 hover:text-gray-300"
+                  }`}
+                >
+                  <Upload size={13} /> Bulk CSV
+                </button>
               </div>
-              <div>
-                <label className="text-xs text-gray-400 mb-1.5 block">Question *</label>
-                <textarea
-                  value={form.question}
-                  onChange={(e) => setForm((f) => ({ ...f, question: e.target.value }))}
-                  placeholder="Enter the interview question…"
-                  rows={3}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600 resize-none"
-                />
-              </div>
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="text-xs text-gray-400 mb-1.5 block">Difficulty</label>
-                  <select
-                    value={form.difficulty}
-                    onChange={(e) => setForm((f) => ({ ...f, difficulty: e.target.value }))}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm"
-                  >
-                    <option>Easy</option>
-                    <option>Medium</option>
-                    <option>Hard</option>
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <label className="text-xs text-gray-400 mb-1.5 block">Company</label>
-                  <input
-                    value={form.company}
-                    onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
-                    placeholder="e.g. Google"
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 mb-1.5 block">Category</label>
-                <input
-                  value={form.category}
-                  onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-                  placeholder="e.g. Algorithms"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 mb-1.5 block">Expected Keywords</label>
-                <input
-                  value={form.expected_keywords}
-                  onChange={(e) => setForm((f) => ({ ...f, expected_keywords: e.target.value }))}
-                  placeholder="e.g. consistency, CAP theorem, replication"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600"
-                />
-              </div>
-            </div>
-
-            {actionError && (
-              <p className="mt-3 text-xs text-red-400">{actionError}</p>
             )}
 
-            <div className="flex items-center gap-3 mt-5">
-              <button
-                onClick={() => setModal(null)}
-                className="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 rounded-xl text-sm text-gray-300 border border-gray-700"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving || !form.topic.trim() || !form.question.trim()}
-                className="flex-1 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm text-white font-medium flex items-center justify-center gap-2 transition-colors"
-              >
-                {saving
-                  ? <><Save size={14} className="animate-pulse" /> Saving…</>
-                  : <><Check size={14} /> {modal.mode === "add" ? "Add Question" : "Save Changes"}</>
-                }
-              </button>
+            <div className="px-6 pb-6">
+
+              {/* ── Single question form ── */}
+              {(modal.mode === "edit" || modalTab === "single") && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1.5 block">Topic *</label>
+                    <input
+                      value={form.topic}
+                      onChange={(e) => setForm((f) => ({ ...f, topic: e.target.value }))}
+                      placeholder="e.g. System Design"
+                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1.5 block">Question *</label>
+                    <textarea
+                      value={form.question}
+                      onChange={(e) => setForm((f) => ({ ...f, question: e.target.value }))}
+                      placeholder="Enter the interview question…"
+                      rows={3}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600 resize-none"
+                    />
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-400 mb-1.5 block">Difficulty</label>
+                      <select
+                        value={form.difficulty}
+                        onChange={(e) => setForm((f) => ({ ...f, difficulty: e.target.value }))}
+                        className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm"
+                      >
+                        <option>Easy</option>
+                        <option>Medium</option>
+                        <option>Hard</option>
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-400 mb-1.5 block">Company</label>
+                      <input
+                        value={form.company}
+                        onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
+                        placeholder="e.g. Google"
+                        className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1.5 block">Category</label>
+                    <input
+                      value={form.category}
+                      onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                      placeholder="e.g. Algorithms"
+                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1.5 block">Expected Keywords</label>
+                    <input
+                      value={form.expected_keywords}
+                      onChange={(e) => setForm((f) => ({ ...f, expected_keywords: e.target.value }))}
+                      placeholder="e.g. consistency, CAP theorem, replication"
+                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600"
+                    />
+                  </div>
+
+                  {actionError && <p className="text-xs text-red-400">{actionError}</p>}
+
+                  <div className="flex items-center gap-3 pt-1">
+                    <button
+                      onClick={() => setModal(null)}
+                      className="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 rounded-xl text-sm text-gray-300 border border-gray-700"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSave}
+                      disabled={saving || !form.topic.trim() || !form.question.trim()}
+                      className="flex-1 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm text-white font-medium flex items-center justify-center gap-2 transition-colors"
+                    >
+                      {saving
+                        ? <><Save size={14} className="animate-pulse" /> Saving…</>
+                        : <><Check size={14} /> {modal.mode === "add" ? "Add Question" : "Save Changes"}</>
+                      }
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Bulk CSV upload ── */}
+              {modal.mode === "add" && modalTab === "csv" && (
+                <div className="space-y-4">
+
+                  {csvResult ? (
+                    /* Success state */
+                    <div className="flex flex-col items-center gap-3 py-6 text-center">
+                      <CheckCircle2 size={36} className="text-green-400" />
+                      <p className="text-base font-semibold text-green-300">
+                        {csvResult.inserted} question{csvResult.inserted !== 1 ? "s" : ""} imported
+                      </p>
+                      <p className="text-xs text-gray-500">{csvResult.filename}</p>
+                      <div className="flex gap-2 mt-2">
+                        <button
+                          onClick={() => { setCsvFile(null); setCsvResult(null); setActionError(""); }}
+                          className="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl text-sm text-gray-300"
+                        >
+                          Upload another
+                        </button>
+                        <button
+                          onClick={() => setModal(null)}
+                          className="px-4 py-2 bg-blue-700 hover:bg-blue-600 rounded-xl text-sm text-white font-medium"
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Drop zone */}
+                      <div
+                        onDragOver={(e) => { e.preventDefault(); setCsvDragOver(true); }}
+                        onDragLeave={() => setCsvDragOver(false)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setCsvDragOver(false);
+                          const f = e.dataTransfer.files[0];
+                          if (f) { setCsvFile(f); setCsvResult(null); setActionError(""); }
+                        }}
+                        onClick={() => document.getElementById("csv-file-input")?.click()}
+                        className={`relative flex flex-col items-center gap-2 p-8 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${
+                          csvDragOver
+                            ? "border-blue-500 bg-blue-900/20"
+                            : csvFile
+                            ? "border-green-700 bg-green-900/10"
+                            : "border-gray-700 hover:border-blue-600 hover:bg-blue-900/10"
+                        }`}
+                      >
+                        <input
+                          id="csv-file-input"
+                          type="file"
+                          accept=".csv"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) { setCsvFile(f); setCsvResult(null); setActionError(""); }
+                            e.target.value = "";
+                          }}
+                        />
+                        {csvFile ? (
+                          <>
+                            <FileText size={28} className="text-green-400" />
+                            <p className="text-sm font-medium text-green-300">{csvFile.name}</p>
+                            <p className="text-xs text-gray-500">{(csvFile.size / 1024).toFixed(1)} KB · click to change</p>
+                          </>
+                        ) : (
+                          <>
+                            <Upload size={28} className="text-gray-600" />
+                            <p className="text-sm text-gray-400">Drop a CSV file here, or click to browse</p>
+                            <p className="text-xs text-gray-600">Only .csv files are supported</p>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Column reference */}
+                      <div className="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
+                        <p className="text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wide">
+                          Expected CSV columns
+                        </p>
+                        <div className="space-y-2">
+                          {[
+                            { name: "topic",             required: true,  note: "The subject area, e.g. System Design" },
+                            { name: "question",          required: true,  note: "The full interview question text" },
+                            { name: "difficulty",        required: false, note: "Easy / Medium / Hard — defaults to Medium" },
+                            { name: "company",           required: false, note: "e.g. Google, Meta" },
+                            { name: "category",          required: false, note: "e.g. Algorithms, Behavioral" },
+                            { name: "expected_keywords", required: false, note: "Comma-separated hint keywords" },
+                          ].map((col) => (
+                            <div key={col.name} className="flex items-start gap-2.5">
+                              <code className={`shrink-0 text-xs px-2 py-0.5 rounded font-mono ${
+                                col.required
+                                  ? "bg-blue-900/50 text-blue-300 border border-blue-800/60"
+                                  : "bg-gray-700/60 text-gray-400 border border-gray-600/40"
+                              }`}>
+                                {col.name}
+                              </code>
+                              <span className="text-xs text-gray-500 leading-tight mt-0.5">
+                                {col.required && <span className="text-blue-400 font-medium mr-1">required ·</span>}
+                                {col.note}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-xs text-gray-600 mt-3 border-t border-gray-700 pt-3">
+                          Column names are case-insensitive. Extra columns are ignored. Rows missing topic or question are skipped automatically.
+                        </p>
+                      </div>
+
+                      {actionError && <p className="text-xs text-red-400">{actionError}</p>}
+
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setModal(null)}
+                          className="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 rounded-xl text-sm text-gray-300 border border-gray-700"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleCsvUpload}
+                          disabled={!csvFile || csvUploading}
+                          className="flex-1 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-sm text-white font-medium flex items-center justify-center gap-2 transition-colors"
+                        >
+                          {csvUploading
+                            ? <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Uploading…</>
+                            : <><Upload size={14} /> Import CSV</>
+                          }
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
             </div>
           </div>
         </div>
