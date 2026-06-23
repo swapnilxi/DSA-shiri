@@ -70,6 +70,7 @@ export const api = {
 
   generateDailyPractice: (opts: {
     categories: { name: string; count: number }[];
+    company?: string;
     context?: string;
     resume_ids?: number[];
     difficulty: string;
@@ -209,6 +210,7 @@ export interface GeneratedQuestion {
   topic: string;
   question: string;
   difficulty: "Easy" | "Medium" | "Hard";
+  company: string;
   category: string;
   expected_keywords: string;
 }

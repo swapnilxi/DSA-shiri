@@ -32,16 +32,24 @@ const EMPTY_FORM: QuestionForm = {
 
 const TABLES = [
   { name: "sessions",      label: "Sessions",      desc: "Every interview session" },
+  { name: "questions",     label: "Questions",     desc: "Loaded question bank" },
   { name: "responses",     label: "Responses",     desc: "Your spoken answers (transcribed)" },
   { name: "scores",        label: "Scores",        desc: "Per-answer rubric scores" },
   { name: "topic_mastery", label: "Topic Mastery", desc: "Rolling averages per topic" },
-  { name: "questions",     label: "Questions",     desc: "Loaded question bank" },
 ];
 
 const SCORE_COLS = new Set([
   "total", "technical_correctness", "depth_completeness",
   "communication_clarity", "problem_solving", "avg_score",
 ]);
+
+function defaultColumnWidth(column: string) {
+  if (column === "id") return 70;
+  if (column === "question") return 520;
+  if (["transcript", "llm_feedback", "expected_keywords"].includes(column)) return 360;
+  if (column.endsWith("_at")) return 180;
+  return 160;
+}
 
 export default function DatabasePage() {
   const router = useRouter();
@@ -50,6 +58,7 @@ export default function DatabasePage() {
   const [loading, setLoading] = useState(false);
   const [sortCol, setSortCol] = useState<string | null>(null);
   const [sortAsc, setSortAsc] = useState(false);
+  const [columnWidths, setColumnWidths] = useState<Record<string, Record<string, number>>>({});
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -84,6 +93,50 @@ export default function DatabasePage() {
   function toggleSort(col: string) {
     if (sortCol === col) setSortAsc((a) => !a);
     else { setSortCol(col); setSortAsc(false); }
+  }
+
+  function getColumnWidth(col: string) {
+    return columnWidths[activeTable]?.[col] ?? defaultColumnWidth(col);
+  }
+
+  function startColumnResize(event: React.MouseEvent, col: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = getColumnWidth(col);
+
+    const onMove = (moveEvent: MouseEvent) => {
+      const width = Math.max(80, Math.min(900, startWidth + moveEvent.clientX - startX));
+      setColumnWidths((current) => ({
+        ...current,
+        [activeTable]: {
+          ...current[activeTable],
+          [col]: width,
+        },
+      }));
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  function resetColumnWidth(event: React.MouseEvent, col: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    setColumnWidths((current) => {
+      const tableWidths = { ...current[activeTable] };
+      delete tableWidths[col];
+      return { ...current, [activeTable]: tableWidths };
+    });
   }
 
   const rows = data
@@ -323,7 +376,19 @@ export default function DatabasePage() {
           )}
 
           {!loading && data && data.rows.length > 0 && (
-            <table className="w-full text-xs border-collapse">
+            <table
+              className="min-w-full table-fixed text-xs border-collapse"
+              style={{
+                width: data.columns.reduce((total, col) => total + getColumnWidth(col), 112),
+              }}
+            >
+              <colgroup>
+                <col style={{ width: 32 }} />
+                {data.columns.map((col) => (
+                  <col key={col} style={{ width: getColumnWidth(col) }} />
+                ))}
+                <col style={{ width: 80 }} />
+              </colgroup>
               <thead className="sticky top-0 bg-gray-900 z-10">
                 <tr>
                   {/* Select-all checkbox */}
@@ -339,7 +404,7 @@ export default function DatabasePage() {
                     <th
                       key={col}
                       onClick={() => toggleSort(col)}
-                      className="text-left px-4 py-3 text-gray-400 font-medium border-b border-gray-800 cursor-pointer hover:text-gray-200 whitespace-nowrap select-none"
+                      className="relative text-left px-4 py-3 text-gray-400 font-medium border-b border-gray-800 cursor-pointer hover:text-gray-200 whitespace-nowrap select-none"
                     >
                       <span className="flex items-center gap-1">
                         {col}
@@ -350,6 +415,12 @@ export default function DatabasePage() {
                           : <ChevronDown size={11} className="opacity-0" />
                         }
                       </span>
+                      <span
+                        onMouseDown={(event) => startColumnResize(event, col)}
+                        onDoubleClick={(event) => resetColumnWidth(event, col)}
+                        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-500/70"
+                        title="Drag to resize; double-click to reset"
+                      />
                     </th>
                   ))}
                   <th className="px-3 py-3 border-b border-gray-800 text-gray-600 font-normal w-20 text-left">
@@ -379,13 +450,18 @@ export default function DatabasePage() {
                       </td>
                       {data.columns.map((col) => {
                         const { text, cls } = formatCell(col, row[col]);
+                        const wrapQuestion = isQuestions && col === "question";
                         return (
                           <td
                             key={col}
-                            className={`px-4 py-2.5 font-mono max-w-xs truncate ${cls}`}
+                            className={`px-4 py-2.5 font-mono ${cls} ${
+                              wrapQuestion
+                                ? "whitespace-normal break-words leading-relaxed"
+                                : "overflow-hidden text-ellipsis whitespace-nowrap"
+                            }`}
                             title={String(row[col] ?? "")}
                           >
-                            {text}
+                            {wrapQuestion ? String(row[col] ?? "—") : text}
                           </td>
                         );
                       })}

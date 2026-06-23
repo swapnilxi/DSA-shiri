@@ -29,6 +29,7 @@ Return ONLY valid JSON:
       "topic": "<main skill/technology from resume>",
       "question": "<specific interview question>",
       "difficulty": "<Easy|Medium|Hard>",
+      "company": "<one or more likely company tags, comma-separated; e.g. Google, Microsoft, Apple, Google or General>",
       "category": "<category>",
       "expected_keywords": "<comma-separated key concepts expected in a strong answer>"
     }}
@@ -66,6 +67,7 @@ async def generate_from_resume(
             "topic": str(q.get("topic", "General")).strip(),
             "question": question_text,
             "difficulty": diff,
+            "company": str(q.get("company", "General")).strip() or "General",
             "category": str(q.get("category", "")).strip() or None,
             "expected_keywords": str(q.get("expected_keywords", "")).strip() or None,
         })

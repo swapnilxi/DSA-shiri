@@ -26,6 +26,9 @@ const DIFF_COLORS: Record<string, string> = {
 };
 
 const DAILY_CATS = [
+  { id: "dsa",                   label: "DSA" },
+  { id: "system_design",         label: "System Design" },
+  { id: "python",                label: "Python" },
   { id: "computer_vision",       label: "Computer Vision" },
   { id: "real_life_scenario",    label: "Real-Life Scenario-Based Technical Question" },
   { id: "large_scale_system",    label: "Large Scale System Design" },
@@ -69,6 +72,8 @@ export default function GeneratePage() {
 
   // ── daily practice state ─────────────────────────────────────────────────────
   const [dailyCats, setDailyCats] = useState<DailyCatState>(DEFAULT_DAILY_CATS);
+  const [companies, setCompanies] = useState<{ company: string; count: number }[]>([]);
+  const [dailyCompany, setDailyCompany] = useState("all");
   const [dailyContext, setDailyContext] = useState("");
   const [dailyDifficulty, setDailyDifficulty] = useState<Difficulty>("Mixed");
   const [dailyGenerating, setDailyGenerating] = useState(false);
@@ -79,6 +84,7 @@ export default function GeneratePage() {
 
   // ── custom categories (persisted) ────────────────────────────────────────────
   const [customCats, setCustomCats] = useState<{ id: string; label: string }[]>([]);
+  const [customCatsLoaded, setCustomCatsLoaded] = useState(false);
   const [newCatLabel, setNewCatLabel] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState("");
@@ -90,6 +96,7 @@ export default function GeneratePage() {
       const all = [...mg.ollama, ...mg.deepseek];
       setModel(saved && all.includes(saved) ? saved : mg.default);
     }).catch(() => {});
+    api.listCompanies().then(setCompanies).catch(() => {});
     loadLibrary();
 
     // Load persisted custom categories
@@ -105,11 +112,13 @@ export default function GeneratePage() {
         });
       }
     } catch { /* ignore */ }
+    finally { setCustomCatsLoaded(true); }
   }, []);
 
   useEffect(() => {
+    if (!customCatsLoaded) return;
     localStorage.setItem("dailyCustomCats", JSON.stringify(customCats));
-  }, [customCats]);
+  }, [customCats, customCatsLoaded]);
 
   function loadLibrary() {
     api.getResumeLibrary().then(setLibrary).catch(() => {});
@@ -199,8 +208,15 @@ export default function GeneratePage() {
 
   function buildCSV(qs: GeneratedQuestion[]) {
     const esc = (v: string) => (v.includes(",") || v.includes('"') || v.includes("\n")) ? `"${v.replace(/"/g, '""')}"` : v;
-    return ["topic,question,difficulty,category,expected_keywords",
-      ...qs.map((q) => [q.topic, q.question, q.difficulty, q.category || "", q.expected_keywords || ""].map(esc).join(","))
+    return ["topic,question,difficulty,company,category,expected_keywords",
+      ...qs.map((q) => [
+        q.topic,
+        q.question,
+        q.difficulty,
+        q.company || "General",
+        q.category || "",
+        q.expected_keywords || "",
+      ].map(esc).join(","))
     ].join("\n");
   }
 
@@ -220,6 +236,7 @@ export default function GeneratePage() {
     try {
       const res = await api.generateDailyPractice({
         categories: enabledCats.map((c) => ({ name: c.label, count: dailyCats[c.id].count })),
+        company: dailyCompany,
         context: dailyContext || undefined,
         resume_ids: selectedIds.size > 0 ? [...selectedIds] : undefined,
         difficulty: dailyDifficulty, model,
@@ -398,6 +415,11 @@ export default function GeneratePage() {
                 <div className="flex items-center gap-2 mb-2 flex-wrap flex-1">
                   <span className="text-xs font-medium text-blue-300 bg-blue-900/40 border border-blue-800 rounded px-2 py-0.5">{q.topic}</span>
                   <span className={`text-xs font-medium border rounded px-2 py-0.5 ${DIFF_COLORS[q.difficulty]}`}>{q.difficulty}</span>
+                  {q.company && (
+                    <span className="text-xs text-purple-300 bg-purple-900/30 border border-purple-800 rounded px-2 py-0.5">
+                      {q.company}
+                    </span>
+                  )}
                   {q.category && <span className="text-xs text-gray-500">{q.category}</span>}
                 </div>
                 <button onClick={() => onRemove(i)} className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-900/20 shrink-0 transition-colors">
@@ -685,6 +707,32 @@ export default function GeneratePage() {
                   <span className="text-sm font-semibold text-purple-300">{dailyTotal} total questions</span>
                 </div>
               )}
+            </div>
+
+            {/* Company target */}
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-4">
+              <label className="text-xs text-gray-400 mb-2 block font-medium">
+                Target company
+              </label>
+              <select
+                value={dailyCompany}
+                onChange={(e) => {
+                  setDailyCompany(e.target.value);
+                  setDailyResult(null);
+                  setDailySaveStatus(null);
+                }}
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-purple-600"
+              >
+                <option value="all">Auto / mixed companies</option>
+                {companies.map((company) => (
+                  <option key={company.company} value={company.company}>
+                    {company.company} ({company.count})
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-2">
+                A selected company is applied to every generated question.
+              </p>
             </div>
 
             {/* Context */}

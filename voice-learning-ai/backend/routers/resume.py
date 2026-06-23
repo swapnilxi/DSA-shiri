@@ -88,11 +88,14 @@ def _build_messages(context: str, num_questions: int, difficulty: str) -> list[d
         '  "topic"            – broad category (e.g. "System Design", "Algorithms", "Behavioral")\n'
         '  "question"         – the interview question\n'
         '  "difficulty"       – "Easy" | "Medium" | "Hard"\n'
+        '  "company"          – one or more likely company tags, comma-separated '
+        '(e.g. "Google", "Microsoft", "Apple, Google", or "General")\n'
         '  "category"         – specific sub-topic\n'
         '  "expected_keywords"– comma-separated key concepts the answer should cover\n'
         "Example: "
         '[{"topic":"Algorithms","question":"...","difficulty":"Medium",'
-        '"category":"Dynamic Programming","expected_keywords":"memoization,DP table"}]'
+        '"company":"Google","category":"Dynamic Programming",'
+        '"expected_keywords":"memoization,DP table"}]'
     )
     user = (
         f"Generate exactly {num_questions} interview questions based on the context below. "
@@ -122,6 +125,7 @@ def _normalise(questions: list[dict]) -> list[dict]:
             "topic": (q.get("topic") or "General").strip(),
             "question": text,
             "difficulty": diff,
+            "company": (q.get("company") or "General").strip(),
             "category": (q.get("category") or "").strip(),
             "expected_keywords": (q.get("expected_keywords") or "").strip(),
         })
@@ -148,7 +152,12 @@ async def _run_llm(context: str, num_questions: int, difficulty: str, model: str
     return await _run_llm_with_messages(messages, model)
 
 
-def _build_messages_daily(context: str, categories: list[dict], difficulty: str) -> list[dict]:
+def _build_messages_daily(
+    context: str,
+    categories: list[dict],
+    difficulty: str,
+    company: str | None = None,
+) -> list[dict]:
     category_breakdown = "\n".join(
         f"  - {cat['name']}: {cat['count']} question{'s' if cat['count'] != 1 else ''}"
         for cat in categories
@@ -159,6 +168,11 @@ def _build_messages_daily(context: str, categories: list[dict], difficulty: str)
         f"All questions must be {difficulty} difficulty."
         if difficulty != "Mixed"
         else "Use a mix of Easy, Medium, and Hard difficulties."
+    )
+    company_line = (
+        f'Every question must use exactly "{company}" in its "company" field.'
+        if company and company != "all"
+        else "Choose the most relevant company tag for each question; use General when no company is especially relevant."
     )
     context_section = (
         f"Use the following context to tailor the questions:\n{context[:MAX_CONTEXT_CHARS]}"
@@ -172,6 +186,8 @@ def _build_messages_daily(context: str, categories: list[dict], difficulty: str)
         '  "topic"             – broad subject area\n'
         '  "question"          – the interview question text\n'
         '  "difficulty"        – "Easy" | "Medium" | "Hard"\n'
+        '  "company"           – one or more likely company tags, comma-separated '
+        '(e.g. "Google", "Microsoft", "Apple, Google", or "General")\n'
         '  "category"          – MUST be exactly one of the category names listed in the request\n'
         '  "expected_keywords" – comma-separated key concepts the answer should cover\n'
     )
@@ -179,6 +195,7 @@ def _build_messages_daily(context: str, categories: list[dict], difficulty: str)
         f"Generate exactly {total} interview questions for a daily practice session.\n"
         f"Distribute them across these categories:\n{category_breakdown}\n\n"
         f"IMPORTANT: The 'category' field for each question MUST exactly match one of: {cat_names}\n"
+        f"{company_line}\n"
         f"{diff_line}\n\n"
         f"{context_section}"
     )
@@ -195,10 +212,10 @@ async def _save_questions_to_db(db: aiosqlite.Connection, questions: list[dict],
         if await cur.fetchone() is None:
             await db.execute(
                 """INSERT INTO questions
-                       (topic, question, difficulty, category, expected_keywords, source_file)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                       (topic, question, difficulty, company, category, expected_keywords, source_file)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (q["topic"], q["question"], q["difficulty"],
-                 q["category"], q["expected_keywords"], source),
+                 q["company"], q["category"], q["expected_keywords"], source),
             )
             inserted += 1
         else:
@@ -257,12 +274,13 @@ async def save_questions(questions: list[dict]):
             if await cur.fetchone() is None:
                 await db.execute(
                     """INSERT INTO questions
-                           (topic, question, difficulty, category, expected_keywords, source_file)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
+                           (topic, question, difficulty, company, category, expected_keywords, source_file)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
                     (
                         (q.get("topic") or "General").strip(),
                         text,
                         diff,
+                        (q.get("company") or "General").strip(),
                         (q.get("category") or "").strip(),
                         (q.get("expected_keywords") or "").strip(),
                         (q.get("source") or "manual"),
@@ -291,6 +309,7 @@ class CategorySpec(BaseModel):
 
 class DailyPracticeRequest(BaseModel):
     categories: list[CategorySpec]
+    company: Optional[str] = None
     context: Optional[str] = None
     resume_ids: Optional[list[int]] = None
     difficulty: str = "Mixed"
@@ -448,14 +467,25 @@ async def generate_daily_practice(req: DailyPracticeRequest):
     combined_context = "\n\n---\n\n".join(context_parts)
     categories_payload = [{"name": c.name, "count": c.count} for c in req.categories]
 
-    messages = _build_messages_daily(combined_context, categories_payload, req.difficulty)
+    messages = _build_messages_daily(
+        combined_context,
+        categories_payload,
+        req.difficulty,
+        req.company,
+    )
     clean = await _run_llm_with_messages(messages, llm_model)
+
+    if req.company and req.company != "all":
+        for question in clean:
+            question["company"] = req.company
 
     source_parts = []
     if req.context and req.context.strip():
         source_parts.append("context")
     if req.resume_ids:
         source_parts.append(f"{len(req.resume_ids)} file(s)")
+    if req.company and req.company != "all":
+        source_parts.append(req.company)
     source = "daily-practice" + (f" ({', '.join(source_parts)})" if source_parts else "")
 
     return {
