@@ -137,6 +137,8 @@ export default function DashboardPage() {
   const [boardError, setBoardError] = useState("");
   const [practiceMode, setPracticeMode] = useState(false);
   const [practiceSetNumber, setPracticeSetNumber] = useState<number | null>(null);
+  const [cachedPracticeQuestions, setCachedPracticeQuestions] = useState<Question[]>([]);
+  const [cachedPracticeSetNumber, setCachedPracticeSetNumber] = useState<number | null>(null);
 
   const fetchBoard = useCallback(async (cats: Set<string>) => {
     setPracticeMode(false);
@@ -174,10 +176,13 @@ export default function DashboardPage() {
     setBoardError("");
     try {
       const questions = await api.getPracticeSet();
+      const setNum = nextPracticeSetNumber();
       setBoardQuestions(questions);
+      setCachedPracticeQuestions(questions);
+      setCachedPracticeSetNumber(setNum);
       setBoardCats(new Set());
       setPracticeMode(true);
-      setPracticeSetNumber(nextPracticeSetNumber());
+      setPracticeSetNumber(setNum);
     } catch (error: unknown) {
       setPracticeMode(false);
       setPracticeSetNumber(null);
@@ -524,6 +529,11 @@ export default function DashboardPage() {
                   setPracticeMode(false);
                   setPracticeSetNumber(null);
                   fetchBoard(new Set());
+                } else if (cachedPracticeQuestions.length > 0) {
+                  setBoardQuestions(cachedPracticeQuestions);
+                  setPracticeSetNumber(cachedPracticeSetNumber);
+                  setBoardCats(new Set());
+                  setPracticeMode(true);
                 } else {
                   fetchPracticeSet();
                 }
