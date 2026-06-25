@@ -1,3 +1,37 @@
+# ══════════════════════════════════════════════════════════════════
+#  Instructions: M2 / LIMITED-RAM SETUP GUIDE
+#
+#  Default config targets M4 (16-32 GB, plenty of SSD).
+#  On M2 (8-16 GB) or tight storage, follow these steps:
+#
+#  1. Comment out the  ── HEAVY (M4) ──  block below
+#  2. Uncomment the    ── LIGHTWEIGHT (M2) ──  block below
+#  3. In backend/.env set:
+#       TTS_ENGINE=piper          # or apple  (zero install)
+#       WHISPER_MODEL=small       # or base  (lightest Whisper)
+#       STT_ENGINE=moonshine      # optional: even lighter than Whisper base
+#  4. Run:  pip install -r requirements.txt
+#
+#  STT options at a glance:
+#    whisper tiny         ~75 MB    local — fastest, lower accuracy
+#    whisper base         ~150 MB   local — M2 sweet-spot (lightweight)
+#    whisper small        ~250 MB   local — M2 sweet-spot (balanced)  ✅ M2 recommended
+#    whisper large-v3-turbo ~1.5 GB local — M4 default, best quality
+#    moonshine/tiny       ~25 MB    local — fastest of all, great for M2  ✅ M2 recommended
+#    moonshine/base       ~75 MB    local — better accuracy, still M2-friendly
+#    groq whisper         0 MB      cloud — free tier (18K sec/month), 300× realtime  ✅ M2
+#    deepgram nova-3      0 MB      cloud — $200 one-time credit, ~100ms  ✅ M2
+#
+#  TTS options at a glance:
+#    Kokoro-82M          ~300 MB   local — M4 default, most natural
+#    Piper ONNX          ~50 MB    local — M2 recommended  ✅ M2
+#    Apple TTS           ~0 MB     local — zero overhead  ✅ M2
+#    Cartesia Sonic-2    ~0 MB     cloud — free tier 500K chars/month  ✅ M2
+#    Deepgram Aura       ~0 MB     cloud — $200 one-time credit  ✅ M2
+# ══════════════════════════════════════════════════════════════════
+
+
+# ── CORE — required on all machines ──────────────────────────────
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 websockets==13.1
@@ -7,22 +41,16 @@ python-multipart==0.0.12
 sqlalchemy==2.0.36
 aiosqlite==0.20.0
 
-# STT — faster-whisper (Apple Silicon optimised via CoreML)
+# STT — faster-whisper (model size set via WHISPER_MODEL in .env)
+# Package is small; only the downloaded model file differs by chip.
+# Apple Silicon CoreML: pip install faster-whisper[ane]
 faster-whisper==1.0.3
-# For Apple Silicon acceleration:
-# pip install faster-whisper[ane]  # adds CoreML support
 
-# TTS — Kokoro (lightweight, ~82M params, ~300MB download)
-kokoro==0.9.4
-sounddevice==0.5.0
-soundfile==0.12.1
-
-# LLM — Ollama Python client
+# LLM — Ollama client (thin HTTP wrapper, fine on all chips)
 ollama==0.3.3
 
 # Audio processing
 numpy==1.26.4
-scipy==1.13.1
 
 # CSV / data
 pandas==2.2.3
@@ -31,8 +59,34 @@ pandas==2.2.3
 pypdf>=4.0.0
 python-docx>=1.0.0
 
+# HTTP client (Gemini, DeepSeek, Cartesia, Deepgram, Groq APIs)
+httpx==0.27.2
+
 # Utils
 pydantic==2.9.2
 pydantic-settings==2.6.0
 python-dotenv==1.0.1
-httpx==0.27.2
+
+
+# ── HEAVY — comment out on M2 ─────────────────────────────────────
+# Kokoro TTS: natural AI voice, ~300 MB model, ~82 M params.
+# Fine on M4; tight on M2 with 8 GB RAM.
+# Swap for Piper (below) or set TTS_ENGINE=apple in .env.
+kokoro==0.9.4
+sounddevice==0.5.0    # only needed by Kokoro
+soundfile==0.12.1     # only needed by Kokoro
+scipy==1.13.1         # only needed by Kokoro audio pipeline
+
+
+# ── LIGHTWEIGHT — uncomment on M2 ────────────────────────────────
+
+# Piper TTS: ONNX, ~50 MB voice file, real-time on any CPU.  ✅ M2
+# Set TTS_ENGINE=piper in backend/.env after install.
+# piper-tts>=1.2.0
+
+# Moonshine STT: ONNX, ~25 MB (tiny) or ~75 MB (base).  ✅ M2
+# Faster than Whisper base on Apple Silicon, Apache 2.0.
+# Set STT_ENGINE=moonshine in backend/.env after install.
+# Tiny (~25 MB):  moonshine-onnx[tiny]
+# Base (~75 MB):  moonshine-onnx[base]
+# moonshine-onnx>=0.1.0

@@ -15,13 +15,24 @@ export const api = {
       ollama_available: boolean;
       available_models: string[];
       whisper_model: string;
-      tts_engine: "kokoro" | "apple";
+      tts_engine: "kokoro" | "apple" | "cartesia" | "piper" | "deepgram";
       tts_voice: string;
       deepseek_configured: boolean;
+      gemini_configured: boolean;
+      cartesia_configured: boolean;
+      cartesia_model: string;
+      cartesia_voice_id: string;
+      deepgram_configured: boolean;
+      deepgram_model: string;
+      stt_engine: "whisper" | "moonshine" | "groq" | "deepgram";
+      moonshine_model: string;
+      groq_configured: boolean;
+      groq_stt_model: string;
+      deepgram_stt_model: string;
     }>("/health"),
 
   getModels: () =>
-    request<{ ollama: string[]; deepseek: string[]; deepseek_configured: boolean; default: string }>("/models"),
+    request<{ ollama: string[]; deepseek: string[]; deepseek_configured: boolean; gemini: string[]; gemini_configured: boolean; default: string }>("/models"),
 
   saveOllamaModel: (model: string) =>
     request<{ ok: boolean; model: string }>("/config/ollama-model", {
@@ -30,8 +41,8 @@ export const api = {
       body: JSON.stringify({ model }),
     }),
 
-  saveTtsEngine: (engine: "kokoro" | "apple") =>
-    request<{ ok: boolean; engine: "kokoro" | "apple" }>("/config/tts-engine", {
+  saveTtsEngine: (engine: "kokoro" | "apple" | "cartesia" | "piper" | "deepgram") =>
+    request<{ ok: boolean; engine: "kokoro" | "apple" | "cartesia" | "piper" | "deepgram" }>("/config/tts-engine", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ engine }),
@@ -46,6 +57,102 @@ export const api = {
 
   removeDeepSeekKey: () =>
     request<{ ok: boolean; configured: boolean }>("/config/deepseek-key", { method: "DELETE" }),
+
+  saveGeminiKey: (api_key: string) =>
+    request<{ ok: boolean; configured: boolean }>("/config/gemini-key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key }),
+    }),
+
+  removeGeminiKey: () =>
+    request<{ ok: boolean; configured: boolean }>("/config/gemini-key", { method: "DELETE" }),
+
+  saveCartesiaKey: (api_key: string) =>
+    request<{ ok: boolean; configured: boolean }>("/config/cartesia-key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key }),
+    }),
+
+  removeCartesiaKey: () =>
+    request<{ ok: boolean; configured: boolean }>("/config/cartesia-key", { method: "DELETE" }),
+
+  saveDeepgramKey: (api_key: string) =>
+    request<{ ok: boolean; configured: boolean }>("/config/deepgram-key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key }),
+    }),
+
+  removeDeepgramKey: () =>
+    request<{ ok: boolean; configured: boolean }>("/config/deepgram-key", { method: "DELETE" }),
+
+  saveWhisperModel: (model: string) =>
+    request<{ ok: boolean; model: string }>("/config/whisper-model", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model }),
+    }),
+
+  saveMoonshineModel: (model: "moonshine/tiny" | "moonshine/base") =>
+    request<{ ok: boolean; model: string }>("/config/moonshine-model", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model }),
+    }),
+
+  saveGroqKey: (api_key: string) =>
+    request<{ ok: boolean; configured: boolean }>("/config/groq-key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key }),
+    }),
+
+  removeGroqKey: () =>
+    request<{ ok: boolean; configured: boolean }>("/config/groq-key", { method: "DELETE" }),
+
+  saveGroqSttModel: (model: string) =>
+    request<{ ok: boolean; model: string }>("/config/groq-stt-model", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model }),
+    }),
+
+  saveSttEngine: (engine: "whisper" | "moonshine" | "groq" | "deepgram") =>
+    request<{ ok: boolean; engine: string }>("/config/stt-engine", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ engine }),
+    }),
+
+  saveDeepgramSttModel: (model: string) =>
+    request<{ ok: boolean; model: string }>("/config/deepgram-stt-model", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model }),
+    }),
+
+  saveDeepgramModel: (model: string) =>
+    request<{ ok: boolean; model: string }>("/config/deepgram-model", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model }),
+    }),
+
+  saveCartesiaVoice: (voice_id: string) =>
+    request<{ ok: boolean; voice_id: string }>("/config/cartesia-voice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ voice_id }),
+    }),
+
+  saveCartesiaModel: (model: "sonic-2" | "sonic-english") =>
+    request<{ ok: boolean; model: string }>("/config/cartesia-model", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model }),
+    }),
 
   startSession: (topic: string, model?: string, company?: string, title?: string) =>
     request<{ session_id: number; questions: Question[]; total: number }>("/interview/start", {

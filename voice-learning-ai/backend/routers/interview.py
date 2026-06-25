@@ -140,7 +140,7 @@ async def interview_ws(websocket: WebSocket, session_id: int):
 
             # STT
             await websocket.send_json({"type": "status", "message": "transcribing..."})
-            transcript, duration = stt.transcribe(audio_data)
+            transcript, duration = await stt.transcribe(audio_data)
 
             await websocket.send_json({"type": "transcript", "text": transcript})
 

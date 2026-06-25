@@ -12,12 +12,19 @@ interface ModelGroups {
   ollama: string[];
   deepseek: string[];
   deepseek_configured: boolean;
+  gemini: string[];
+  gemini_configured: boolean;
   default: string;
 }
 
 const DEEPSEEK_LABELS: Record<string, string> = {
   "deepseek-chat": "DeepSeek V3 (Chat)",
   "deepseek-reasoner": "DeepSeek R1 (Reasoner)",
+};
+
+const GEMINI_LABELS: Record<string, string> = {
+  "gemini-2.0-flash": "Gemini 2.0 Flash ⚡ (free tier)",
+  "gemini-1.5-flash": "Gemini 1.5 Flash (free tier)",
 };
 
 const DIFF_COLORS: Record<string, string> = {
@@ -288,7 +295,10 @@ export default function DashboardPage() {
   }
 
   const isDeepSeek = selectedModel.startsWith("deepseek-");
+  const isGemini = selectedModel.startsWith("gemini-");
+  const isApiModel = isDeepSeek || isGemini;
   const deepSeekNotConfigured = isDeepSeek && modelGroups && !modelGroups.deepseek_configured;
+  const geminiNotConfigured = isGemini && modelGroups && !modelGroups.gemini_configured;
 
   return (
     <div className="min-h-screen bg-gray-950 text-white p-6">
@@ -357,10 +367,9 @@ export default function DashboardPage() {
             <div className="flex-1 min-w-52">
               <label className="text-xs text-gray-400 mb-1.5 block">
                 Choose AI model
-                {isDeepSeek && (
+                {isApiModel ? (
                   <span className="ml-2 px-1.5 py-0.5 bg-blue-900 text-blue-300 rounded text-xs">API</span>
-                )}
-                {!isDeepSeek && (
+                ) : (
                   <span className="ml-2 px-1.5 py-0.5 bg-green-900 text-green-300 rounded text-xs">Local</span>
                 )}
               </label>
@@ -381,6 +390,14 @@ export default function DashboardPage() {
                   ) : (
                     <option value="" disabled>No local Ollama models found</option>
                   )}
+                  <optgroup label="Google Gemini — API (free tier)">
+                    {(modelGroups?.gemini ?? ["gemini-2.0-flash", "gemini-1.5-flash"]).map((m) => (
+                      <option key={m} value={m}>
+                        {GEMINI_LABELS[m] ?? m}
+                        {!modelGroups?.gemini_configured ? " ⚠ key needed" : ""}
+                      </option>
+                    ))}
+                  </optgroup>
                   <optgroup label="DeepSeek — API">
                     {(modelGroups?.deepseek ?? ["deepseek-chat", "deepseek-reasoner"]).map((m) => (
                       <option key={m} value={m}>
@@ -392,9 +409,18 @@ export default function DashboardPage() {
                 </select>
                 <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
-              {!isDeepSeek && selectedModel && (
+              {!isApiModel && selectedModel && (
                 <p className="text-xs text-green-400 mt-1.5">
                   Installed locally • This model will run the interview
+                </p>
+              )}
+              {geminiNotConfigured && (
+                <p className="text-xs text-yellow-400 mt-1.5">
+                  Add your Gemini API key in{" "}
+                  <button onClick={() => router.push("/settings")} className="underline hover:text-yellow-300">
+                    Settings
+                  </button>{" "}
+                  first.
                 </p>
               )}
               {deepSeekNotConfigured && (
@@ -412,7 +438,7 @@ export default function DashboardPage() {
             <div className="self-end">
               <button
                 onClick={handleStart}
-                disabled={starting || !!deepSeekNotConfigured}
+                disabled={starting || !!deepSeekNotConfigured || !!geminiNotConfigured}
                 className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl font-medium text-sm"
               >
                 <Zap size={16} />

@@ -1,8 +1,10 @@
 """
-Unified LLM client — routes to Ollama or DeepSeek based on model name.
+Unified LLM client — routes to Ollama, DeepSeek, or Gemini based on model name.
 
   deepseek-chat      → DeepSeek V3  (API)
   deepseek-reasoner  → DeepSeek R1  (API)
+  gemini-2.0-flash   → Gemini 2.0 Flash  (API, free tier)
+  gemini-1.5-flash   → Gemini 1.5 Flash  (API, free tier)
   anything else      → Ollama (local)
 """
 import asyncio
@@ -12,6 +14,7 @@ import ollama as _ollama
 from config import settings
 
 DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner"}
+GEMINI_MODELS = {"gemini-2.0-flash", "gemini-1.5-flash"}
 
 
 async def chat(messages: list[dict], model: str | None = None) -> str:
@@ -19,6 +22,8 @@ async def chat(messages: list[dict], model: str | None = None) -> str:
     model = model or settings.ollama_model
     if model in DEEPSEEK_MODELS:
         return await _deepseek_chat(messages, model)
+    if model in GEMINI_MODELS:
+        return await _gemini_chat(messages, model)
     return await _ollama_chat(messages, model)
 
 
@@ -41,6 +46,23 @@ async def _deepseek_chat(messages: list[dict], model: str) -> str:
             f"{settings.deepseek_base_url}/chat/completions",
             headers={
                 "Authorization": f"Bearer {settings.deepseek_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={"model": model, "messages": messages},
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+
+
+async def _gemini_chat(messages: list[dict], model: str) -> str:
+    if not settings.gemini_api_key:
+        raise ValueError("Gemini API key is not configured. Add it in Settings.")
+
+    async with httpx.AsyncClient(timeout=90) as client:
+        resp = await client.post(
+            f"{settings.gemini_base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {settings.gemini_api_key}",
                 "Content-Type": "application/json",
             },
             json={"model": model, "messages": messages},
