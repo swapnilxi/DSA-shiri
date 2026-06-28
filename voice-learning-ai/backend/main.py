@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from pydantic import BaseModel
 
 from db.database import init_db
-from routers import interview, questions, progress, resume
+from routers import interview, questions, progress, resume, practice
 from services.llm import ollama_models, DEEPSEEK_MODELS, GEMINI_MODELS
 from config import settings
 
@@ -35,6 +35,7 @@ app.include_router(interview.router)
 app.include_router(questions.router)
 app.include_router(progress.router)
 app.include_router(resume.router)
+app.include_router(practice.router)
 
 
 @app.get("/health")

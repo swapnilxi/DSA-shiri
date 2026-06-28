@@ -6,8 +6,46 @@ import {
   Sparkles, ChevronDown, ChevronRight,
   BookOpen, Target, TrendingUp, AlertTriangle,
   CheckCircle2, XCircle, Lightbulb, BarChart2,
+  ExternalLink, BrainCircuit, Trash2,
 } from "lucide-react";
 import { api, Session, SessionResponse, SessionAnalysis } from "@/lib/api";
+
+interface AnalyseMoreResult {
+  what_you_got_right: string;
+  key_gaps: string[];
+  misconceptions: string[];
+  mini_lesson: string;
+  next_steps: string[];
+  stronger_answer_outline: string;
+}
+
+interface AnalyseMoreState {
+  loading: boolean;
+  open: boolean;
+  result: AnalyseMoreResult | null;
+  error: string | null;
+}
+
+function renderMiniLesson(text: string) {
+  return text.split("\n").map((line, i) => {
+    if (line.startsWith("## ")) return <h3 key={i} className="text-sm font-semibold text-indigo-300 mt-3 mb-1">{line.slice(3)}</h3>;
+    if (line.startsWith("# "))  return <h2 key={i} className="text-sm font-bold text-indigo-200 mt-3 mb-1">{line.slice(2)}</h2>;
+    if (line.startsWith("```")) return <div key={i} className="font-mono text-xs text-emerald-300" />;
+    const parts: React.ReactNode[] = [];
+    const rx = /`([^`]+)`|\*\*([^*]+)\*\*/g;
+    let last = 0; let m: RegExpExecArray | null;
+    while ((m = rx.exec(line)) !== null) {
+      if (m.index > last) parts.push(line.slice(last, m.index));
+      if (m[1]) parts.push(<code key={m.index} className="px-1 py-0.5 bg-gray-700 rounded text-emerald-300 text-xs font-mono">{m[1]}</code>);
+      if (m[2]) parts.push(<strong key={m.index} className="text-white">{m[2]}</strong>);
+      last = m.index + m[0].length;
+    }
+    if (last < line.length) parts.push(line.slice(last));
+    const isBullet = /^\s*[-•*]/.test(line);
+    if (isBullet) return <li key={i} className="ml-4 list-disc text-gray-300 text-xs leading-relaxed">{parts.map(p => typeof p === "string" ? p.replace(/^\s*[-•*]\s*/, "") : p)}</li>;
+    return <p key={i} className={`text-gray-300 text-xs leading-relaxed ${line === "" ? "h-2" : ""}`}>{parts}</p>;
+  });
+}
 
 const DIMENSIONS: { key: keyof SessionResponse; label: string; color: string; max: number }[] = [
   { key: "technical_correctness", label: "Technical",  color: "bg-blue-500",   max: 40 },
@@ -81,6 +119,7 @@ export default function SessionDetailPage() {
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState("");
 
+  const [analyseMore, setAnalyseMore] = useState<Record<number, AnalyseMoreState>>({});
   const [analysis,         setAnalysis]         = useState<SessionAnalysis | null>(null);
   const [analysisLoading,  setAnalysisLoading]  = useState(false);
   const [analysisError,    setAnalysisError]    = useState("");
@@ -121,6 +160,28 @@ export default function SessionDetailPage() {
 
   function toggleQ(i: number) {
     setExpandedQs((prev) => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
+  }
+
+  async function handleAnalyseMore(r: SessionResponse) {
+    const key = r.id;
+    setAnalyseMore(prev => ({
+      ...prev,
+      [key]: { loading: false, open: true, result: prev[key]?.result ?? null, error: null },
+    }));
+    if (analyseMore[key]?.result) return; // already fetched
+    setAnalyseMore(prev => ({ ...prev, [key]: { ...prev[key], loading: true } }));
+    try {
+      const model = localStorage.getItem("selectedModel") || undefined;
+      const result = await api.analyseAnswer(
+        r.question_id,
+        r.transcript || "",
+        { technical_correctness: r.technical_correctness, depth_completeness: r.depth_completeness, communication_clarity: r.communication_clarity, problem_solving: r.problem_solving, total: r.total },
+        model,
+      );
+      setAnalyseMore(prev => ({ ...prev, [key]: { loading: false, open: true, result, error: null } }));
+    } catch (e: unknown) {
+      setAnalyseMore(prev => ({ ...prev, [key]: { loading: false, open: true, result: null, error: e instanceof Error ? e.message : "Failed" } }));
+    }
   }
 
   if (loading) {
@@ -169,6 +230,18 @@ export default function SessionDetailPage() {
               <span className="text-gray-500 text-sm">/100</span>
             </div>
           )}
+          <button
+            onClick={async () => {
+              if (!confirm("Delete this session and all its responses? This cannot be undone.")) return;
+              await api.deleteSession(sessionId);
+              localStorage.removeItem(`session_analysis_${sessionId}`);
+              router.push("/dashboard");
+            }}
+            className="p-2 rounded-lg bg-gray-800 hover:bg-red-900/40 text-gray-500 hover:text-red-400 border border-transparent hover:border-red-800 transition-colors"
+            title="Delete session"
+          >
+            <Trash2 size={15} />
+          </button>
         </div>
 
         {/* Summary stats */}
@@ -374,7 +447,9 @@ export default function SessionDetailPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {responses.map((r, i) => (
+            {responses.map((r, i) => {
+              const am = analyseMore[r.id];
+              return (
               <div key={r.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
                 {/* Question header */}
                 <div className="flex items-start justify-between gap-3 mb-3">
@@ -383,7 +458,13 @@ export default function SessionDetailPage() {
                       {i + 1}
                     </span>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-200 leading-snug">{r.question}</p>
+                      <button
+                        onClick={() => window.open(`/practice/${r.question_id}`, "_blank")}
+                        className="text-sm font-medium text-gray-200 leading-snug hover:text-blue-300 transition-colors text-left group"
+                      >
+                        {r.question}
+                        <ExternalLink size={10} className="inline ml-1 opacity-0 group-hover:opacity-60 transition-opacity" />
+                      </button>
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-xs text-gray-500">{r.topic}</span>
                         <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${difficultyBadge(r.difficulty)}`}>
@@ -426,9 +507,108 @@ export default function SessionDetailPage() {
 
                 {/* LLM in-session feedback (concise) */}
                 {r.llm_feedback && (
-                  <div className="flex gap-2 bg-blue-950/40 border border-blue-900/50 rounded-xl px-4 py-3">
+                  <div className="flex gap-2 bg-blue-950/40 border border-blue-900/50 rounded-xl px-4 py-3 mb-3">
                     <MessageSquare size={14} className="shrink-0 mt-0.5 text-blue-400" />
                     <p className="text-sm text-blue-200 leading-relaxed">{r.llm_feedback}</p>
+                  </div>
+                )}
+
+                {/* Analyse More button */}
+                {r.transcript && r.total != null && (
+                  <div>
+                    <button
+                      onClick={() => am?.open
+                        ? setAnalyseMore(prev => ({ ...prev, [r.id]: { ...prev[r.id], open: false } }))
+                        : handleAnalyseMore(r)
+                      }
+                      disabled={am?.loading}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all
+                        ${am?.result
+                          ? "bg-indigo-900/30 border-indigo-700 text-indigo-300 hover:bg-indigo-900/50"
+                          : "bg-gray-800 border-gray-700 text-gray-400 hover:border-indigo-700 hover:text-indigo-300"
+                        } disabled:opacity-50`}
+                    >
+                      {am?.loading ? (
+                        <><span className="w-3 h-3 border border-indigo-400 border-t-transparent rounded-full animate-spin" />Analysing…</>
+                      ) : (
+                        <><BrainCircuit size={12} />Analyse More{am?.open ? " ▲" : " ▼"}</>
+                      )}
+                    </button>
+
+                    {/* Analyse More result panel */}
+                    {am?.open && (
+                      <div className="mt-3 space-y-3">
+                        {am.error && (
+                          <p className="text-xs text-red-400 bg-red-950/30 border border-red-900 rounded-lg px-3 py-2">{am.error}</p>
+                        )}
+                        {am.loading && (
+                          <div className="flex items-center gap-2 text-indigo-300 text-xs py-2">
+                            <div className="w-3 h-3 border border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                            Analysing your answer in depth…
+                          </div>
+                        )}
+                        {am.result && (
+                          <>
+                            {/* What you got right */}
+                            <div className="bg-green-950/25 border border-green-800/40 rounded-xl px-4 py-3">
+                              <p className="text-xs font-semibold text-green-400 mb-1.5 flex items-center gap-1"><CheckCircle2 size={11} /> What you got right</p>
+                              <p className="text-xs text-green-200 leading-relaxed">{am.result.what_you_got_right}</p>
+                            </div>
+
+                            {/* Key gaps */}
+                            {am.result.key_gaps.length > 0 && (
+                              <div className="bg-red-950/20 border border-red-800/40 rounded-xl px-4 py-3">
+                                <p className="text-xs font-semibold text-red-400 mb-1.5 flex items-center gap-1"><AlertTriangle size={11} /> Key gaps</p>
+                                <ul className="space-y-1">
+                                  {am.result.key_gaps.map((g, j) => (
+                                    <li key={j} className="flex gap-2 text-xs text-red-200"><span className="text-red-600 shrink-0">•</span>{g}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Misconceptions */}
+                            {am.result.misconceptions.length > 0 && (
+                              <div className="bg-orange-950/20 border border-orange-800/40 rounded-xl px-4 py-3">
+                                <p className="text-xs font-semibold text-orange-400 mb-1.5 flex items-center gap-1"><XCircle size={11} /> Misconceptions to correct</p>
+                                <ul className="space-y-1">
+                                  {am.result.misconceptions.map((m, j) => (
+                                    <li key={j} className="flex gap-2 text-xs text-orange-200"><span className="text-orange-600 shrink-0">•</span>{m}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Mini lesson */}
+                            <div className="bg-indigo-950/25 border border-indigo-800/40 rounded-xl px-4 py-3">
+                              <p className="text-xs font-semibold text-indigo-400 mb-2 flex items-center gap-1"><BookOpen size={11} /> Mini Lesson</p>
+                              <div className="space-y-1">{renderMiniLesson(am.result.mini_lesson)}</div>
+                            </div>
+
+                            {/* Stronger answer outline */}
+                            <div className="bg-blue-950/20 border border-blue-800/40 rounded-xl px-4 py-3">
+                              <p className="text-xs font-semibold text-blue-400 mb-1.5 flex items-center gap-1"><Lightbulb size={11} /> Stronger answer outline</p>
+                              <p className="text-xs text-blue-200 leading-relaxed">{am.result.stronger_answer_outline}</p>
+                            </div>
+
+                            {/* Next steps */}
+                            {am.result.next_steps.length > 0 && (
+                              <div className="bg-purple-950/20 border border-purple-800/40 rounded-xl px-4 py-3">
+                                <p className="text-xs font-semibold text-purple-400 mb-1.5 flex items-center gap-1"><TrendingUp size={11} /> Next steps</p>
+                                <ol className="space-y-1">
+                                  {am.result.next_steps.map((s, j) => (
+                                    <li key={j} className="flex gap-2 text-xs text-purple-200">
+                                      <span className="shrink-0 w-4 h-4 rounded-full bg-purple-800 text-purple-200 text-xs flex items-center justify-center font-bold">{j+1}</span>
+                                      {s}
+                                    </li>
+                                  ))}
+                                </ol>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -436,7 +616,8 @@ export default function SessionDetailPage() {
                   <p className="text-xs text-gray-600 italic">This question was not scored.</p>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

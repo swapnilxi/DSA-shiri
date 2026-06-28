@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BarChart2, BookOpen, Mic, Upload, Zap, ChevronDown, Database,
-  Sparkles, RefreshCw, X, Download, FileText,
+  Sparkles, RefreshCw, X, Download, FileText, Trash2,
 } from "lucide-react";
 import { api, Stats, TopicMastery, Session, Question } from "@/lib/api";
 import { TopicRadar } from "@/components/dashboard/TopicRadar";
@@ -483,25 +483,55 @@ export default function DashboardPage() {
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-300">Recent Sessions</h3>
-              <button onClick={() => router.push("/settings")}
-                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
-                <Upload size={12} /> Upload CSV
-              </button>
+              <div className="flex items-center gap-2">
+                {sessions.length > 0 && (
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Delete all ${sessions.length} session${sessions.length > 1 ? "s" : ""}? This cannot be undone.`)) return;
+                      await api.deleteAllSessions(sessions.map(s => s.id));
+                      setSessions([]);
+                    }}
+                    className="text-xs text-red-500 hover:text-red-400 flex items-center gap-1 transition-colors"
+                  >
+                    <Trash2 size={11} /> Clear all
+                  </button>
+                )}
+                <button onClick={() => router.push("/settings")}
+                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
+                  <Upload size={12} /> Upload CSV
+                </button>
+              </div>
             </div>
             <div className="space-y-2">
               {sessions.slice(0, 6).map((s) => (
                 <div key={s.id}
-                  onClick={() => router.push(`/dashboard/session/${s.id}`)}
-                  className="flex items-center justify-between py-2.5 px-3 bg-gray-800 hover:bg-gray-750 rounded-xl cursor-pointer">
-                  <div>
+                  className="flex items-center justify-between py-2.5 px-3 bg-gray-800 hover:bg-gray-750 rounded-xl group">
+                  <div
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => router.push(`/dashboard/session/${s.id}`)}
+                  >
                     <p className="text-sm text-gray-200">{s.title}</p>
                     <p className="text-xs text-gray-500">{new Date(s.started_at).toLocaleDateString()}</p>
                   </div>
-                  {s.total_score != null && (
-                    <span className={`text-sm font-bold ${
-                      s.total_score >= 80 ? "text-green-400" : s.total_score >= 60 ? "text-yellow-400" : "text-red-400"
-                    }`}>{s.total_score.toFixed(0)}</span>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {s.total_score != null && (
+                      <span className={`text-sm font-bold ${
+                        s.total_score >= 80 ? "text-green-400" : s.total_score >= 60 ? "text-yellow-400" : "text-red-400"
+                      }`}>{s.total_score.toFixed(0)}</span>
+                    )}
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!confirm("Delete this session? This cannot be undone.")) return;
+                        await api.deleteSession(s.id);
+                        setSessions(prev => prev.filter(x => x.id !== s.id));
+                      }}
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-600 hover:text-red-400 hover:bg-red-900/20 transition-all"
+                      title="Delete session"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
               ))}
               {sessions.length === 0 && (
@@ -622,7 +652,11 @@ export default function DashboardPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {boardQuestions.map((q, i) => (
-                <div key={q.id} className="bg-gray-800 border border-gray-700 rounded-xl p-3">
+                <div
+                  key={q.id}
+                  onClick={() => window.open(`/practice/${q.id}`, "_blank")}
+                  className="bg-gray-800 border border-gray-700 rounded-xl p-3 cursor-pointer hover:border-blue-700 hover:bg-gray-750 transition-colors group"
+                >
                   <div className="flex items-start gap-2">
                     <span className="text-xs text-gray-600 font-mono shrink-0 mt-0.5 w-5">{i + 1}.</span>
                     <div className="flex-1 min-w-0">
@@ -645,6 +679,7 @@ export default function DashboardPage() {
                         </span>
                       </div>
                       <p className="text-sm text-gray-200 leading-snug line-clamp-2">{q.question}</p>
+                      <p className="text-xs text-gray-600 group-hover:text-blue-500 mt-1.5 transition-colors">Practice →</p>
                     </div>
                   </div>
                 </div>

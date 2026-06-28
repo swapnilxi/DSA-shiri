@@ -271,6 +271,20 @@ export const api = {
       body: JSON.stringify(q),
     }),
 
+  deleteSession: (id: number) =>
+    request<{ deleted: number }>(`/progress/db/sessions/rows`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify([id]),
+    }),
+
+  deleteAllSessions: (ids: number[]) =>
+    request<{ deleted: number }>(`/progress/db/sessions/rows`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(ids),
+    }),
+
   batchDeleteRows: (table: string, ids: number[]) =>
     request<{ deleted: number }>(`/progress/db/${table}/rows`, {
       method: "DELETE",
@@ -291,6 +305,53 @@ export const api = {
   },
   getMastery: () => request<TopicMastery[]>("/progress/mastery"),
   getStats: () => request<Stats>("/progress/stats"),
+
+  // ── Practice ──────────────────────────────────────────────────────────────
+
+  getPracticeQuestion: (id: number) =>
+    request<Question>(`/practice/${id}`),
+
+  generatePracticeContent: (
+    questionId: number,
+    type: "hints" | "concepts" | "approach" | "sample_answer" | "followups" | "quiz" | "deep_dive",
+    model?: string,
+  ) =>
+    request<{ type: string; content: unknown }>(`/practice/${questionId}/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, model }),
+    }),
+
+  practiceChat: (
+    questionId: number,
+    message: string,
+    history: { role: string; content: string }[],
+    model?: string,
+  ) =>
+    request<{ reply: string }>(`/practice/${questionId}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, history, model }),
+    }),
+
+  analyseAnswer: (
+    questionId: number,
+    transcript: string,
+    scores: Record<string, number>,
+    model?: string,
+  ) =>
+    request<{
+      what_you_got_right: string;
+      key_gaps: string[];
+      misconceptions: string[];
+      mini_lesson: string;
+      next_steps: string[];
+      stronger_answer_outline: string;
+    }>(`/practice/${questionId}/analyse-answer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript, scores, model }),
+    }),
 };
 
 export interface Question {
