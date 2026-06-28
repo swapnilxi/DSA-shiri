@@ -1,6 +1,7 @@
 """
 Interactive practice endpoints — fetch a single question and generate AI-powered study content.
 """
+import base64
 import json as _json
 import os
 from typing import Optional
@@ -10,7 +11,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from config import settings
-from services import assessor, stt
+from services import assessor, stt, tts
 from services.llm import chat
 
 router = APIRouter(prefix="/practice", tags=["practice"])
@@ -264,11 +265,21 @@ async def practice_followup(
                 "remaining_gaps": opening["focus_areas"],
             }
         ]
+        # Generate TTS for the opening question
+        audio_b64 = None
+        try:
+            tts_text = opening["assistant_text"]
+            audio_bytes = await tts.speak(tts_text)
+            audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+        except Exception:
+            pass
+
         return {
             "round": 0,
             "complete": False,
             "transcript": "",
             "assistant_text": opening["assistant_text"],
+            "audio_b64": audio_b64,
             "understanding_score": 0,
             "report": None,
             "turns": seed_turns,
@@ -330,11 +341,20 @@ async def practice_followup(
         report["turns"] = completed_turns
         report["rounds_completed"] = len(completed_turns)
 
+    # Generate TTS for the assistant response
+    audio_b64 = None
+    try:
+        audio_bytes = await tts.speak(assistant_text)
+        audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+    except Exception:
+        pass
+
     return {
         "round": round_number,
         "complete": not continue_loop,
         "transcript": transcript,
         "assistant_text": assistant_text,
+        "audio_b64": audio_b64,
         "understanding_score": review["understanding_score"],
         "report": report,
         "turns": updated_turns,

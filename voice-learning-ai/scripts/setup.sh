@@ -24,7 +24,7 @@ pip install --upgrade pip -q
 pip install -r requirements.txt -q
 
 # Seed the database
-python seed.py
+python ../data/seed.py
 
 # 3. Frontend
 echo ""

@@ -59,9 +59,11 @@ Return JSON with this shape:
 
 The follow-up question should stay on the same question and push deeper into trade-offs, failure modes, scale, design choices, or conceptual depth."""
 
-FOLLOWUP_REVIEW_SYSTEM = """You are a rigorous but educational technical interviewer.
-You are in follow-up mode, which means you must stay on the same interview question.
-Your job is to explain what the candidate now understands, what is still missing, and what deeper question to ask next.
+FOLLOWUP_REVIEW_SYSTEM = """You are a rigorous but deeply educational technical interviewer.
+You are in follow-up mode: you must stay on the same interview question.
+Your dual role is to GRILL and TEACH simultaneously:
+- GRILL: push the learner to think harder, expose gaps, ask sharper questions.
+- TEACH: after each answer, explain the concept clearly — give the 'why', concrete examples, trade-offs, failure modes.
 Address the learner directly as "you". Do not refer to them as "the candidate", "they", "he", or "she" in feedback.
 Return JSON only."""
 
@@ -82,13 +84,14 @@ Return JSON with this shape:
   "understanding_score": <0-100>,
   "what_they_now_understand": ["<specific idea you understand now>", "..."],
   "remaining_gaps": ["<specific gap you still have>", "..."],
-  "coach_feedback": "<2-4 sentences speaking directly to you about what is right, what is still weak, and why it matters>",
-  "deeper_explanation": "<2-4 sentences of concrete teaching. Add context, trade-offs, examples, or failure modes>",
-  "hint": "<one focused hint or mental model>",
-  "next_question": "<one deeper interviewer-style question that stays on the same topic>"
+  "coach_feedback": "<2-4 sentences addressed directly to you. First acknowledge what was right. Then be DIRECT about what is wrong or missing and WHY it matters in practice. Be a strict coach, not a cheerleader.>",
+  "deeper_explanation": "<2-4 sentences of concrete TEACHING. Explain the concept clearly: give the 'why', a real-world example or analogy, trade-offs, failure modes, or a mental model the learner can use. This is your chance to teach, not just critique.>",
+  "hint": "<one focused hint, mental model, or key phrase to remember>",
+  "next_question": "<one sharper interviewer-style follow-up question that stays on the same topic and pushes the learner deeper>"
 }}
 
-The next question must sharpen the same topic rather than switching to a new topic."""
+The next question must deepen understanding of the same topic — not introduce a new one."""
+
 
 FOLLOWUP_REPORT_SYSTEM = """You are a senior interview coach writing a saved follow-up report for one interview question.
 The goal is to judge conceptual depth after a follow-up grilling sequence and give targeted advice.
@@ -304,24 +307,30 @@ async def generate_followup_report(
     }
 
 
-def should_continue_followup(understanding_score: float, round_number: int, max_rounds: int = 3) -> bool:
+def should_continue_followup(understanding_score: float, round_number: int, max_rounds: int = 30) -> bool:
     if round_number >= max_rounds:
         return False
-    return understanding_score < MIN_FOLLOWUP_SCORE_TO_STOP
+    return True
 
 
 def compose_followup_message(review: dict, continue_loop: bool) -> str:
-    parts = [review.get("coach_feedback", "").strip(), review.get("deeper_explanation", "").strip()]
+    coach = review.get("coach_feedback", "").strip()
+    explanation = review.get("deeper_explanation", "").strip()
     hint = review.get("hint", "").strip()
     next_question = review.get("next_question", "").strip()
 
+    # Build coaching block (feedback + teaching)
+    coaching_parts = [p for p in [coach, explanation] if p]
     if hint:
-        parts.append(f"Hint: {hint}")
+        coaching_parts.append(f"💡 Hint: {hint}")
+    coaching_block = " ".join(coaching_parts)
+
+    # Append follow-up question on its own line with a blank line separator
     if continue_loop and next_question:
-        parts.append(f"Follow-up question: {next_question}")
+        return f"{coaching_block}\n\nFollow-up question: {next_question}"
     else:
-        parts.append("You've improved the depth on this question. When you're ready, click Next question.")
-    return " ".join(part for part in parts if part)
+        return f"{coaching_block}\n\nYou've built solid depth on this question. When you're ready, click Next question."
+
 
 
 async def generate_encouragement(score: float, model: str | None = None) -> str:

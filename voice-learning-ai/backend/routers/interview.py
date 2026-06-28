@@ -16,7 +16,7 @@ from services import assessor, stt, tts
 router = APIRouter(prefix="/interview", tags=["interview"])
 
 DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", settings.database_path))
-MAX_FOLLOWUP_ROUNDS = 3
+MAX_FOLLOWUP_ROUNDS = 30
 
 
 @router.post("/start")
@@ -271,23 +271,38 @@ async def _run_followup_mode(
             }
         )
 
-        msg = await _receive_msg(websocket)
-        if "bytes" not in msg:
-            try:
-                data = json.loads(msg.get("text", "{}"))
-            except json.JSONDecodeError:
-                continue
-            action = data.get("action")
-            if action == "end":
-                raise WebSocketDisconnect()
-            elif action == "next":
-                advance_requested = True
-                speak_summary = False
-                await websocket.send_json({"type": "status", "message": "Saving follow-up progress and moving to the next question..."})
-                closing_text = "We'll stop the follow-up drill here and move on to the next question."
-                break
+        # Keep waiting until we receive audio bytes or an explicit end/next action.
+        # Without this inner loop, stray JSON messages (status pings, unknown actions)
+        # would cause `continue` to advance `round_number`, silently burning a round
+        # and making the agent stop responding after just 2 real answers.
+        audio_received = False
+        while True:
+            msg = await _receive_msg(websocket)
+            if "bytes" not in msg:
+                try:
+                    data = json.loads(msg.get("text", "{}"))
+                except json.JSONDecodeError:
+                    # Malformed text — keep waiting
+                    continue
+                action = data.get("action")
+                if action == "end":
+                    raise WebSocketDisconnect()
+                elif action == "next":
+                    advance_requested = True
+                    speak_summary = False
+                    await websocket.send_json({"type": "status", "message": "Saving follow-up progress and moving to the next question..."})
+                    closing_text = "We'll stop the follow-up drill here and move on to the next question."
+                    break
+                else:
+                    # Unknown JSON (e.g. status ping) — stay in this round
+                    continue
             else:
-                continue
+                audio_received = True
+                break
+
+        # User clicked "next" — exit the outer for loop
+        if not audio_received:
+            break
 
         await websocket.send_json({"type": "status", "message": f"Transcribing follow-up round {round_number}..."})
         latest_answer, _ = await stt.transcribe(msg["bytes"])

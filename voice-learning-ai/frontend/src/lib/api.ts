@@ -459,6 +459,7 @@ export interface PracticeFollowupResponse {
   complete: boolean;
   transcript: string;
   assistant_text: string;
+  audio_b64: string | null;
   understanding_score: number;
   report: FollowupReport | null;
   turns: FollowupTurn[];

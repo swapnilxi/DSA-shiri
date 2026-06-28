@@ -208,10 +208,10 @@ pip install faster-whisper[ane]
 
 ```bash
 # 3f. Seed the database with sample questions
-python seed.py
+python ../data/seed.py
 # Expected output:
-#   Seeded 18 sample questions.
-#   Database ready at: ../data/voicelearning.db
+#   Done. inserted=18  company-updated=0  skipped=0
+#   Database: /path/to/voice-learning-ai/data/voicelearning.db
 ```
 
 ---
@@ -458,6 +458,7 @@ The app stores its working data in a single SQLite file at `data/voicelearning.d
 | `topic_mastery` | Rolling average score per topic across all sessions |
 | `resumes` | Uploaded documents and parsed text used for question generation |
 | `session_questions` | The exact question order selected for each interview session |
+| `response_followups` | Saved follow-up reports and transcript turns for follow-up mode drills |
 
 ### In-app Database Viewer
 
@@ -507,7 +508,6 @@ voice-learning-ai/
 ├── README.md
 ├── backend/
 │   ├── main.py                 # FastAPI app + WebSocket
-│   ├── seed.py                 # DB init + sample question loader
 │   ├── requirements.txt
 │   ├── config.py               # model paths, Ollama URL, settings
 │   ├── db/
@@ -554,6 +554,7 @@ voice-learning-ai/
 │       └── lib/
 │           └── api.ts
 ├── data/
+│   ├── seed.py                 # DB init + sample question loader
 │   └── question_banks/
 │       ├── sample_faang.csv
 │       ├── sample_microsoft.csv

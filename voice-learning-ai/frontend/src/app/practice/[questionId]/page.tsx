@@ -565,9 +565,27 @@ export default function PracticePage() {
   const [followupMessages, setFollowupMessages] = useState<ChatMsg[]>([]);
   const [followupInput, setFollowupInput] = useState("");
   const [followupLoading, setFollowupLoading] = useState(false);
-  const [followupStatus, setFollowupStatus] = useState("Start follow-up mode to get grilled on this question.");
+  const [followupStatus, setFollowupStatus] = useState("Click \"Generate\" to receive the first question and begin the deep-dive.");
   const [followupReport, setFollowupReport] = useState<FollowupReport | null>(null);
   const followupEndRef = useRef<HTMLDivElement>(null);
+  const [followupPanelOpen, setFollowupPanelOpen] = useState(false);
+
+  // Play base64-encoded WAV audio (TTS response)
+  const playFollowupAudio = useCallback((audio_b64: string | null) => {
+    if (!audio_b64) return;
+    try {
+      const bytes = Uint8Array.from(atob(audio_b64), c => c.charCodeAt(0));
+      const ctx = new AudioContext();
+      ctx.decodeAudioData(bytes.buffer, (buffer) => {
+        const src = ctx.createBufferSource();
+        src.buffer = buffer;
+        src.connect(ctx.destination);
+        src.start(0);
+      });
+    } catch {
+      // silently ignore TTS playback errors
+    }
+  }, []);
 
   // Practice drawer
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -709,12 +727,13 @@ export default function PracticePage() {
       setFollowupReport(null);
       setFollowupInput("");
       setFollowupStatus("Answer with text or use the mic. I will keep pushing deeper.");
+      playFollowupAudio(res.audio_b64);
     } catch (error: unknown) {
       setFollowupStatus(error instanceof Error ? error.message : "Could not start follow-up mode.");
     } finally {
       setFollowupLoading(false);
     }
-  }, [model, questionId]);
+  }, [model, playFollowupAudio, questionId]);
 
   const submitFollowup = useCallback(async (opts: { text?: string; audio?: Blob }) => {
     const text = opts.text?.trim() ?? "";
@@ -742,12 +761,13 @@ export default function PracticePage() {
           ? `Follow-up mode complete. Final depth score: ${res.understanding_score.toFixed(0)}/100.`
           : `Depth score so far: ${res.understanding_score.toFixed(0)}/100. Keep going.`,
       );
+      playFollowupAudio(res.audio_b64);
     } catch (error: unknown) {
       setFollowupStatus(error instanceof Error ? error.message : "Follow-up mode failed.");
     } finally {
       setFollowupLoading(false);
     }
-  }, [followupTurns, model, questionId]);
+  }, [followupTurns, model, playFollowupAudio, questionId]);
 
   const toggleFollowupMic = useCallback(async () => {
     if (followupLoading) return;
@@ -1117,161 +1137,195 @@ export default function PracticePage() {
             })}
           </div>
 
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">🧠 Follow-up Mode</p>
-                <p className="text-sm text-gray-300 mt-1">
-                  Stay on this exact question. I will add context, explain gaps, and keep asking sharper follow-ups until the topic becomes clear.
-                </p>
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+            {/* ── Collapsible header ── */}
+            <button
+              onClick={() => setFollowupPanelOpen(o => !o)}
+              className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-800/40 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <BrainCircuit className="h-4 w-4 text-emerald-400" />
+                <p className="text-sm font-semibold text-gray-200">Follow-up Mode</p>
+                {followupActive && (
+                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-emerald-900/50 border border-emerald-700 text-emerald-300">
+                    Active · {followupMessages.filter(m => m.role === "user").length} answer{followupMessages.filter(m => m.role === "user").length !== 1 ? "s" : ""}
+                  </span>
+                )}
               </div>
-              <button
-                onClick={startFollowupMode}
-                disabled={followupLoading}
-                className="shrink-0 rounded-xl border border-emerald-700 bg-emerald-900/30 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/50 disabled:opacity-50"
+              <svg
+                className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${followupPanelOpen ? "rotate-180" : ""}`}
+                fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"
               >
-                {followupActive ? "Restart" : "Start"}
-              </button>
-            </div>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
 
-            <div className="rounded-xl border border-gray-800 bg-gray-950/60 p-3 text-xs text-gray-400 flex items-center justify-between gap-3 min-h-[46px]">
-              <span>{followupStatus}</span>
-              {recorder.isRecording && (
-                <div className="shrink-0 bg-gray-900/80 px-2 py-0.5 rounded-lg border border-gray-800 h-7 flex items-center overflow-hidden">
-                  <Waveform active={true} volume={recorder.volume} color="#34d399" />
-                </div>
-              )}
-            </div>
+            {followupPanelOpen && (
+              <div className="border-t border-gray-800 p-4 space-y-4">
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Stay on this exact question. Click <strong className="text-gray-400">Generate</strong> to receive the first interview question, then keep answering to go deeper — up to 30 rounds.
+                </p>
 
-            <div className="max-h-96 overflow-y-auto space-y-3 rounded-2xl border border-gray-800 bg-gray-950/40 p-3">
-              {!followupActive && (
-                <div className="py-8 text-center text-gray-600">
-                  <BrainCircuit className="mx-auto mb-3 h-6 w-6 text-gray-700" />
-                  <p className="text-xs">Start follow-up mode to generate the first deeper question.</p>
-                </div>
-              )}
-              {followupMessages.map((msg, index) => (
-                <div key={index} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[92%] rounded-2xl px-3 py-2.5 text-xs leading-relaxed ${
-                    msg.role === "user"
-                      ? "bg-emerald-600 text-white rounded-tr-sm"
-                      : "bg-gray-800 border border-gray-700 text-gray-200 rounded-tl-sm"
-                  }`}>
-                    {msg.role === "assistant"
-                      ? <div className="space-y-1">{renderMarkdown(msg.content)}</div>
-                      : msg.content}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="rounded-xl border border-gray-800 bg-gray-950/60 px-3 py-2.5 text-xs text-gray-400 flex items-center gap-3 flex-1 min-h-[40px]">
+                    <span>{followupStatus}</span>
+                    {recorder.isRecording && (
+                      <div className="shrink-0 bg-gray-900/80 px-2 py-0.5 rounded-lg border border-gray-800 h-7 flex items-center overflow-hidden">
+                        <Waveform active={true} volume={recorder.volume} color="#34d399" />
+                      </div>
+                    )}
                   </div>
+                  <button
+                    onClick={startFollowupMode}
+                    disabled={followupLoading}
+                    className="shrink-0 rounded-xl border border-emerald-700 bg-emerald-900/30 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/50 disabled:opacity-50 transition-colors"
+                  >
+                    {followupLoading && !followupActive ? (
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 border border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                        Generating…
+                      </span>
+                    ) : followupActive ? "Restart" : "Generate"}
+                  </button>
                 </div>
-              ))}
-              {followupLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-gray-800 border border-gray-700 rounded-2xl rounded-tl-sm px-3 py-2.5">
-                    <span className="flex gap-1">
-                      <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                      <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                      <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                    </span>
-                  </div>
-                </div>
-              )}
-              {followupReport && (
-                <div className="rounded-2xl border border-emerald-800/40 bg-emerald-950/20 p-4">
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">Final depth report</p>
-                    <span className="text-sm font-bold text-emerald-300">
-                      {followupReport.understanding_score.toFixed(0)}
-                      <span className="text-xs text-gray-500">/100</span>
-                    </span>
-                  </div>
-                  <p className="text-sm text-emerald-100 leading-relaxed mb-3">{followupReport.overall_assessment}</p>
-                  {followupReport.strengths.length > 0 && (
-                    <div className="mb-3">
-                      <p className="text-xs font-semibold text-emerald-400 mb-1">Strengths</p>
-                      <ul className="space-y-1">
-                        {followupReport.strengths.map((item, index) => (
-                          <li key={index} className="flex gap-2 text-xs text-emerald-100">
-                            <span className="text-emerald-500 shrink-0">•</span>{item}
-                          </li>
-                        ))}
-                      </ul>
+
+                <div className="max-h-96 overflow-y-auto space-y-3 rounded-2xl border border-gray-800 bg-gray-950/40 p-3">
+                  {!followupActive && (
+                    <div className="py-8 text-center text-gray-600">
+                      <BrainCircuit className="mx-auto mb-3 h-6 w-6 text-gray-700" />
+                      <p className="text-xs">Click <strong className="text-gray-500">Generate</strong> to receive your first interview question.</p>
                     </div>
                   )}
-                  {followupReport.remaining_gaps.length > 0 && (
-                    <div className="mb-3">
-                      <p className="text-xs font-semibold text-yellow-300 mb-1">Remaining gaps</p>
-                      <ul className="space-y-1">
-                        {followupReport.remaining_gaps.map((item, index) => (
-                          <li key={index} className="flex gap-2 text-xs text-yellow-100">
-                            <span className="text-yellow-500 shrink-0">•</span>{item}
-                          </li>
-                        ))}
-                      </ul>
+                  {followupMessages.map((msg, index) => (
+                    <div key={index} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[92%] rounded-2xl px-3 py-2.5 text-xs leading-relaxed ${
+                        msg.role === "user"
+                          ? "bg-emerald-600 text-white rounded-tr-sm"
+                          : "bg-gray-800 border border-gray-700 text-gray-200 rounded-tl-sm"
+                      }`}>
+                        {msg.role === "assistant"
+                          ? <div className="space-y-3">
+                              {msg.content.split("\n\n").map((para, pi) => (
+                                <div key={pi} className={`space-y-1 ${para.startsWith("Follow-up question:") ? "pt-1 border-t border-gray-600" : ""}`}>
+                                  {renderMarkdown(para)}
+                                </div>
+                              ))}
+                            </div>
+                          : msg.content}
+                      </div>
+                    </div>
+                  ))}
+                  {followupLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-gray-800 border border-gray-700 rounded-2xl rounded-tl-sm px-3 py-2.5">
+                        <span className="flex gap-1">
+                          <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                          <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                          <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                        </span>
+                      </div>
                     </div>
                   )}
-                  {followupReport.recommended_drills.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-blue-300 mb-1">Recommended drills</p>
-                      <ul className="space-y-1">
-                        {followupReport.recommended_drills.map((item, index) => (
-                          <li key={index} className="flex gap-2 text-xs text-blue-100">
-                            <span className="text-blue-500 shrink-0">•</span>{item}
-                          </li>
-                        ))}
-                      </ul>
+                  {followupReport && (
+                    <div className="rounded-2xl border border-emerald-800/40 bg-emerald-950/20 p-4">
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">Final depth report</p>
+                        <span className="text-sm font-bold text-emerald-300">
+                          {followupReport.understanding_score.toFixed(0)}
+                          <span className="text-xs text-gray-500">/100</span>
+                        </span>
+                      </div>
+                      <p className="text-sm text-emerald-100 leading-relaxed mb-3">{followupReport.overall_assessment}</p>
+                      {followupReport.strengths.length > 0 && (
+                        <div className="mb-3">
+                          <p className="text-xs font-semibold text-emerald-400 mb-1">Strengths</p>
+                          <ul className="space-y-1">
+                            {followupReport.strengths.map((item, index) => (
+                              <li key={index} className="flex gap-2 text-xs text-emerald-100">
+                                <span className="text-emerald-500 shrink-0">•</span>{item}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {followupReport.remaining_gaps.length > 0 && (
+                        <div className="mb-3">
+                          <p className="text-xs font-semibold text-yellow-300 mb-1">Remaining gaps</p>
+                          <ul className="space-y-1">
+                            {followupReport.remaining_gaps.map((item, index) => (
+                              <li key={index} className="flex gap-2 text-xs text-yellow-100">
+                                <span className="text-yellow-500 shrink-0">•</span>{item}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {followupReport.recommended_drills.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-blue-300 mb-1">Recommended drills</p>
+                          <ul className="space-y-1">
+                            {followupReport.recommended_drills.map((item, index) => (
+                              <li key={index} className="flex gap-2 text-xs text-blue-100">
+                                <span className="text-blue-500 shrink-0">•</span>{item}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   )}
+                  <div ref={followupEndRef} />
                 </div>
-              )}
-              <div ref={followupEndRef} />
-            </div>
 
-            <div className="flex gap-2">
-              <textarea
-                value={followupInput}
-                onChange={e => setFollowupInput(e.target.value)}
-                onKeyDown={async (e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    if (!followupActive) {
-                      await startFollowupMode();
-                    } else {
-                      await submitFollowup({ text: followupInput });
-                    }
-                  }
-                }}
-                placeholder={followupActive ? "Answer the follow-up question…" : "Start follow-up mode first"}
-                rows={3}
-                className="flex-1 rounded-xl border border-gray-700 bg-gray-800/50 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-600 resize-none focus:outline-none focus:border-emerald-600"
-              />
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={toggleFollowupMic}
-                  disabled={followupLoading}
-                  className={`flex h-11 w-11 items-center justify-center rounded-xl text-white transition-all disabled:opacity-50 ${
-                    recorder.isRecording
-                      ? "bg-red-600 hover:bg-red-500 animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.6)]"
-                      : "bg-gray-800 hover:bg-gray-700"
-                  }`}
-                  title={recorder.isRecording ? "Stop recording and submit" : "Record answer"}
-                >
-                  {recorder.isRecording ? <Square size={16} /> : <Mic size={16} />}
-                </button>
-                <button
-                  onClick={async () => {
-                    if (!followupActive) {
-                      await startFollowupMode();
-                    } else {
-                      await submitFollowup({ text: followupInput });
-                    }
-                  }}
-                  disabled={followupLoading || (!followupInput.trim() && !followupActive)}
-                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
-                  title="Send follow-up answer"
-                >
-                  <SendHorizontal size={16} />
-                </button>
+                <div className="flex gap-2">
+                  <textarea
+                    value={followupInput}
+                    onChange={e => setFollowupInput(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        if (!followupActive) {
+                          await startFollowupMode();
+                        } else {
+                          await submitFollowup({ text: followupInput });
+                        }
+                      }
+                    }}
+                    placeholder={followupActive ? "Answer the follow-up question…" : "Click Generate to start…"}
+                    rows={3}
+                    className="flex-1 rounded-xl border border-gray-700 bg-gray-800/50 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-600 resize-none focus:outline-none focus:border-emerald-600"
+                  />
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={toggleFollowupMic}
+                      disabled={followupLoading}
+                      className={`flex h-11 w-11 items-center justify-center rounded-xl text-white transition-all disabled:opacity-50 ${
+                        recorder.isRecording
+                          ? "bg-red-600 hover:bg-red-500 animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.6)]"
+                          : "bg-gray-800 hover:bg-gray-700"
+                      }`}
+                      title={recorder.isRecording ? "Stop recording and submit" : "Record answer"}
+                    >
+                      {recorder.isRecording ? <Square size={16} /> : <Mic size={16} />}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!followupActive) {
+                          await startFollowupMode();
+                        } else {
+                          await submitFollowup({ text: followupInput });
+                        }
+                      }}
+                      disabled={followupLoading || (!followupInput.trim() && !followupActive)}
+                      className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
+                      title="Send follow-up answer"
+                    >
+                      <SendHorizontal size={16} />
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Notes */}
