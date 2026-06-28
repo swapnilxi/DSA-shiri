@@ -10,6 +10,8 @@ The default setup is still local-first:
 
 The codebase now also includes optional cloud and exploratory integrations such as DeepSeek, Gemini, Groq STT, Deepgram STT/TTS, and Cartesia TTS. Those are additive, not foundational: this is still a local-first application, with local models and local storage as the primary path.
 
+> **Fun Fact:** The name **Shiri** is a playful nod to Apple's Siri, which is fitting for a voice-driven application. Additionally, Shiri is another name for the Hindu goddess Tripurasundari.
+
 ---
 
 ## What It Does
