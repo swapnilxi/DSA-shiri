@@ -192,7 +192,7 @@ export default function SessionDetailPage() {
     return (
       <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-4 text-gray-400">
         <p className="text-red-400">{error || "Session not found."}</p>
-        <button onClick={() => router.push("/dashboard")} className="text-sm text-blue-400 hover:underline">← Back to Dashboard</button>
+        <button onClick={() => router.back()} className="text-sm text-blue-400 hover:underline">← Back</button>
       </div>
     );
   }
@@ -208,7 +208,7 @@ export default function SessionDetailPage() {
 
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => router.push("/dashboard")}
+          <button onClick={() => router.back()}
             className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white">
             <ArrowLeft size={16} />
           </button>

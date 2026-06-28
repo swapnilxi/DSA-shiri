@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  BarChart2, BookOpen, Mic, Upload, Zap, ChevronDown, Database,
+  BarChart2, BookOpen, Mic, Upload, Zap, ChevronDown, ChevronRight, Database,
   Sparkles, RefreshCw, X, Download, FileText, Trash2,
 } from "lucide-react";
 import { api, Stats, TopicMastery, Session, Question } from "@/lib/api";
@@ -508,65 +508,95 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Recent sessions */}
+          {/* Recent sessions — top 5 tiles */}
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-300">Recent Sessions</h3>
-              <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+                <BarChart2 size={14} className="text-blue-400" />
+                Recent Sessions
                 {sessions.length > 0 && (
+                  <span className="px-1.5 py-0.5 bg-gray-800 rounded text-xs text-gray-500">{sessions.length}</span>
+                )}
+              </h3>
+              <button
+                onClick={() => router.push("/sessions")}
+                className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors group"
+              >
+                View All
+                <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+              </button>
+            </div>
+
+            {sessions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <Mic size={28} className="text-gray-700 mb-2" />
+                <p className="text-sm text-gray-500">No sessions yet</p>
+                <p className="text-xs text-gray-600 mt-1">Start your first interview above!</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {sessions.slice(0, 5).map((s) => {
+                  const scoreColor =
+                    s.total_score == null ? "text-gray-500" :
+                    s.total_score >= 80 ? "text-green-400" :
+                    s.total_score >= 60 ? "text-yellow-400" : "text-red-400";
+                  const scoreBg =
+                    s.total_score == null ? "bg-gray-800 border-gray-700" :
+                    s.total_score >= 80 ? "bg-green-950/50 border-green-800/60" :
+                    s.total_score >= 60 ? "bg-yellow-950/50 border-yellow-800/60" : "bg-red-950/50 border-red-800/60";
+                  const statusChip: Record<string, string> = {
+                    completed:  "bg-green-900/40 text-green-400 border-green-800/50",
+                    active:     "bg-blue-900/40 text-blue-400 border-blue-800/50",
+                    abandoned:  "bg-gray-800 text-gray-500 border-gray-700",
+                  };
+                  return (
+                    <div
+                      key={s.id}
+                      onClick={() => router.push(`/dashboard/session/${s.id}`)}
+                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer hover:brightness-110 transition-all group ${scoreBg}`}
+                    >
+                      {/* Score bubble */}
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-gray-900/60 border ${scoreBg}`}>
+                        <span className={`text-sm font-bold ${scoreColor}`}>
+                          {s.total_score != null ? s.total_score.toFixed(0) : "—"}
+                        </span>
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-200 truncate">{s.title}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-gray-500">
+                            {new Date(s.started_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                          {s.topic && s.topic !== "random" && (
+                            <span className="text-xs text-blue-400 bg-blue-900/30 border border-blue-800/40 rounded px-1.5 py-0.5 truncate max-w-[90px]">
+                              {s.topic}
+                            </span>
+                          )}
+                          <span className={`text-xs border rounded px-1.5 py-0.5 capitalize ${statusChip[s.status] ?? statusChip.abandoned}`}>
+                            {s.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Arrow */}
+                      <ChevronRight size={14} className="text-gray-600 group-hover:text-blue-400 shrink-0 transition-colors" />
+                    </div>
+                  );
+                })}
+
+                {sessions.length > 5 && (
                   <button
-                    onClick={async () => {
-                      if (!confirm(`Delete all ${sessions.length} session${sessions.length > 1 ? "s" : ""}? This cannot be undone.`)) return;
-                      await api.deleteAllSessions(sessions.map(s => s.id));
-                      setSessions([]);
-                    }}
-                    className="text-xs text-red-500 hover:text-red-400 flex items-center gap-1 transition-colors"
+                    onClick={() => router.push("/sessions")}
+                    className="w-full mt-1 py-2 rounded-xl border border-dashed border-gray-700 hover:border-blue-700 text-xs text-gray-500 hover:text-blue-400 transition-colors flex items-center justify-center gap-1.5"
                   >
-                    <Trash2 size={11} /> Clear all
+                    +{sessions.length - 5} more sessions — View all
+                    <ChevronRight size={12} />
                   </button>
                 )}
-                <button onClick={() => router.push("/settings")}
-                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
-                  <Upload size={12} /> Upload CSV
-                </button>
               </div>
-            </div>
-            <div className="space-y-2">
-              {sessions.slice(0, 6).map((s) => (
-                <div key={s.id}
-                  className="flex items-center justify-between py-2.5 px-3 bg-gray-800 hover:bg-gray-750 rounded-xl group">
-                  <div
-                    className="flex-1 min-w-0 cursor-pointer"
-                    onClick={() => router.push(`/dashboard/session/${s.id}`)}
-                  >
-                    <p className="text-sm text-gray-200">{s.title}</p>
-                    <p className="text-xs text-gray-500">{new Date(s.started_at).toLocaleDateString()}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {s.total_score != null && (
-                      <span className={`text-sm font-bold ${
-                        s.total_score >= 80 ? "text-green-400" : s.total_score >= 60 ? "text-yellow-400" : "text-red-400"
-                      }`}>{s.total_score.toFixed(0)}</span>
-                    )}
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (!confirm("Delete this session? This cannot be undone.")) return;
-                        await api.deleteSession(s.id);
-                        setSessions(prev => prev.filter(x => x.id !== s.id));
-                      }}
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-600 hover:text-red-400 hover:bg-red-900/20 transition-all"
-                      title="Delete session"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {sessions.length === 0 && (
-                <p className="text-sm text-gray-500 text-center py-8">No sessions yet — start your first interview!</p>
-              )}
-            </div>
+            )}
           </div>
         </div>
 
