@@ -29,4 +29,17 @@ async def init_db():
     import aiosqlite
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.executescript(sql)
+        await _ensure_schema_migrations(conn)
         await conn.commit()
+
+
+async def _ensure_schema_migrations(conn):
+    await _ensure_column(conn, "sessions", "follow_up_mode", "INTEGER DEFAULT 0")
+
+
+async def _ensure_column(conn, table: str, column: str, definition: str):
+    async with conn.execute(f"PRAGMA table_info({table})") as cur:
+        rows = await cur.fetchall()
+    existing = {row[1] for row in rows}
+    if column not in existing:
+        await conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")

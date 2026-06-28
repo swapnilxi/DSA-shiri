@@ -2,6 +2,7 @@
 Progress tracking — session history, topic mastery, score trends.
 """
 import aiosqlite
+import json
 import os
 from fastapi import APIRouter, Body, HTTPException, Query
 
@@ -30,21 +31,34 @@ async def get_session_detail(session_id: int):
         db.row_factory = aiosqlite.Row
 
         async with db.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)) as cur:
-            session = dict(await cur.fetchone())
+            session_row = await cur.fetchone()
+        if not session_row:
+            raise HTTPException(404, "Session not found")
+        session = dict(session_row)
 
         async with db.execute(
             """SELECT r.id, q.topic, q.question, q.difficulty,
                       r.transcript, r.audio_duration,
                       s.total, s.technical_correctness, s.depth_completeness,
-                      s.communication_clarity, s.problem_solving, s.llm_feedback
+                      s.communication_clarity, s.problem_solving, s.llm_feedback,
+                      rf.report_json AS followup_report
                FROM responses r
                JOIN questions q ON q.id = r.question_id
                LEFT JOIN scores s ON s.response_id = r.id
+               LEFT JOIN response_followups rf ON rf.response_id = r.id
                WHERE r.session_id = ?
                ORDER BY r.question_order""",
             (session_id,),
         ) as cur:
-            responses = [dict(r) for r in await cur.fetchall()]
+            responses = []
+            for row in await cur.fetchall():
+                item = dict(row)
+                if item.get("followup_report"):
+                    try:
+                        item["followup_report"] = json.loads(item["followup_report"])
+                    except json.JSONDecodeError:
+                        item["followup_report"] = None
+                responses.append(item)
 
     return {"session": session, "responses": responses}
 
@@ -103,7 +117,7 @@ async def get_topic_mastery():
 @router.get("/db/{table}")
 async def browse_table(table: str, limit: int = 200):
     """Raw table browser — used by the in-app DB viewer."""
-    ALLOWED = {"sessions", "questions", "responses", "scores", "topic_mastery"}
+    ALLOWED = {"sessions", "questions", "responses", "scores", "topic_mastery", "resumes", "session_questions", "response_followups"}
     if table not in ALLOWED:
         from fastapi import HTTPException
         raise HTTPException(400, f"Unknown table '{table}'. Allowed: {ALLOWED}")
@@ -119,7 +133,7 @@ async def browse_table(table: str, limit: int = 200):
 @router.delete("/db/{table}/rows")
 async def batch_delete_rows(table: str, ids: list[int] = Body(...)):
     """Delete multiple rows by ID from any allowed table."""
-    ALLOWED = {"sessions", "questions", "responses", "scores", "topic_mastery"}
+    ALLOWED = {"sessions", "questions", "responses", "scores", "topic_mastery", "resumes", "session_questions", "response_followups"}
     if table not in ALLOWED:
         raise HTTPException(400, f"Unknown table '{table}'")
     if not ids:
@@ -130,6 +144,10 @@ async def batch_delete_rows(table: str, ids: list[int] = Body(...)):
         if table == "sessions":
             # cascade: scores → responses → session_questions → session
             await db.execute(
+                f"DELETE FROM response_followups WHERE response_id IN "
+                f"(SELECT id FROM responses WHERE session_id IN ({placeholders}))", ids
+            )
+            await db.execute(
                 f"DELETE FROM scores WHERE response_id IN "
                 f"(SELECT id FROM responses WHERE session_id IN ({placeholders}))", ids
             )
@@ -138,6 +156,13 @@ async def batch_delete_rows(table: str, ids: list[int] = Body(...)):
             )
             await db.execute(
                 f"DELETE FROM session_questions WHERE session_id IN ({placeholders})", ids
+            )
+        elif table == "responses":
+            await db.execute(
+                f"DELETE FROM response_followups WHERE response_id IN ({placeholders})", ids
+            )
+            await db.execute(
+                f"DELETE FROM scores WHERE response_id IN ({placeholders})", ids
             )
         await db.execute(f"DELETE FROM {table} WHERE id IN ({placeholders})", ids)
         await db.commit()

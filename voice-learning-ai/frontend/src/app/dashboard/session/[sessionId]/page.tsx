@@ -8,7 +8,7 @@ import {
   CheckCircle2, XCircle, Lightbulb, BarChart2,
   ExternalLink, BrainCircuit, Trash2,
 } from "lucide-react";
-import { api, Session, SessionResponse, SessionAnalysis } from "@/lib/api";
+import { api, FollowupReport, Session, SessionResponse, SessionAnalysis } from "@/lib/api";
 
 interface AnalyseMoreResult {
   what_you_got_right: string;
@@ -220,6 +220,11 @@ export default function SessionDetailPage() {
                 {session.status}
               </span>
             </p>
+            {session.follow_up_mode && (
+              <span className="inline-flex mt-2 rounded-full bg-emerald-900/40 px-2.5 py-1 text-xs font-semibold text-emerald-300 border border-emerald-800">
+                Follow-up mode session
+              </span>
+            )}
           </div>
           {session.total_score != null && (
             <div className="flex items-center gap-1.5">
@@ -449,6 +454,7 @@ export default function SessionDetailPage() {
           <div className="space-y-4">
             {responses.map((r, i) => {
               const am = analyseMore[r.id];
+              const followupReport = r.followup_report as FollowupReport | null | undefined;
               return (
               <div key={r.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
                 {/* Question header */}
@@ -510,6 +516,66 @@ export default function SessionDetailPage() {
                   <div className="flex gap-2 bg-blue-950/40 border border-blue-900/50 rounded-xl px-4 py-3 mb-3">
                     <MessageSquare size={14} className="shrink-0 mt-0.5 text-blue-400" />
                     <p className="text-sm text-blue-200 leading-relaxed">{r.llm_feedback}</p>
+                  </div>
+                )}
+
+                {followupReport && (
+                  <div className="mb-3 rounded-2xl border border-emerald-800/40 bg-emerald-950/20 p-4">
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">
+                        Follow-up mode report
+                      </p>
+                      <span className="text-sm font-bold text-emerald-300">
+                        {followupReport.understanding_score.toFixed(0)}
+                        <span className="text-xs text-gray-500">/100 depth</span>
+                      </span>
+                    </div>
+                    <p className="text-sm text-emerald-100 leading-relaxed mb-3">
+                      {followupReport.overall_assessment}
+                    </p>
+
+                    {followupReport.strengths?.length > 0 && (
+                      <div className="mb-3">
+                        <p className="text-xs font-semibold text-emerald-400 mb-1.5">Strengths after follow-up</p>
+                        <ul className="space-y-1">
+                          {followupReport.strengths.map((item, index) => (
+                            <li key={index} className="flex gap-2 text-xs text-emerald-100">
+                              <span className="text-emerald-500 shrink-0">•</span>{item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {followupReport.remaining_gaps?.length > 0 && (
+                      <div className="mb-3">
+                        <p className="text-xs font-semibold text-yellow-300 mb-1.5">Remaining gaps</p>
+                        <ul className="space-y-1">
+                          {followupReport.remaining_gaps.map((item, index) => (
+                            <li key={index} className="flex gap-2 text-xs text-yellow-100">
+                              <span className="text-yellow-500 shrink-0">•</span>{item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {followupReport.turns && followupReport.turns.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-gray-400">Follow-up turns</p>
+                        {followupReport.turns.map((turn) => (
+                          <div key={turn.round} className="rounded-xl border border-gray-800 bg-gray-950/50 p-3">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <span className="text-xs font-semibold text-blue-300">Round {turn.round}</span>
+                              <span className="text-xs text-gray-500">{turn.understanding_score.toFixed(0)}/100</span>
+                            </div>
+                            <p className="text-xs text-blue-100 leading-relaxed mb-2">{turn.interviewer_prompt}</p>
+                            <p className="text-xs text-gray-300 italic leading-relaxed mb-2">"{turn.candidate_answer}"</p>
+                            <p className="text-xs text-emerald-100 leading-relaxed">{turn.coach_feedback}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 

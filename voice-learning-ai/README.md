@@ -1,17 +1,26 @@
-# Voice Learning AI — Local Voice Assessment Platform
+# Voice Learning AI — Local-First Voice Interview Platform
 
-A fully offline, voice-driven technical interview simulator that runs on your MacBook M4. Looks and feels like a Microsoft Teams interview, uses Ollama for intelligent assessment, Whisper for speech recognition, and Kokoro TTS for a natural interviewer voice.
+Voice Learning AI is a local-first, voice-driven technical interview simulator built for Apple Silicon Macs. It combines a Next.js frontend, a FastAPI backend, SQLite persistence, and realtime voice flows for mock interviews, guided practice, and question generation.
+
+The default setup is still local-first:
+- LLM via Ollama running on your machine
+- STT via faster-whisper or Moonshine
+- TTS via Kokoro, Piper, or macOS voices
+- Data stored locally in SQLite
+
+The codebase now also includes optional cloud and exploratory integrations such as DeepSeek, Gemini, Groq STT, Deepgram STT/TTS, and Cartesia TTS. Those are additive, not foundational: this is still a local-first application, with local models and local storage as the primary path.
 
 ---
 
 ## What It Does
 
-- **Speaks to you** like a real interviewer (Kokoro TTS, runs at ~50ms latency on M4)
-- **Listens** to your answers via microphone (faster-whisper, near-realtime)
-- **Evaluates** your response using a local LLM via Ollama — scores on FAANG rubrics (clarity, depth, correctness, communication)
-- **Adapts** follow-up questions based on your answer, just like a real interview
-- **Tracks progress** in SQLite — see how you improve per topic over time
-- **Loads custom question banks** from CSV files (microsoft.csv, leetcode.csv, system_design.csv, etc.)
+- **Runs realtime interview sessions** with spoken prompts, recorded answers, transcription, scoring, and spoken feedback
+- **Scores answers on a 100-point rubric** covering technical correctness, depth, communication, and problem solving
+- **Tracks progress locally** in SQLite with session history, topic mastery, and post-session analysis
+- **Supports guided practice mode** with hints, concept breakdowns, approach coaching, sample answers, deep dives, quizzes, and answer analysis
+- **Generates questions from resumes, documents, and topic prompts** using the configured LLM
+- **Manages question banks** from built-in seed data, CSV uploads, CRUD editing, random boards, and fixed daily practice sets
+- **Lets you switch providers** for LLM, STT, and TTS without changing the core app flow
 
 ---
 
@@ -44,17 +53,30 @@ A fully offline, voice-driven technical interview simulator that runs on your Ma
 ```
 Browser (Next.js)
     │
-    │  WebSocket (audio stream)
+    │  HTTP + WebSocket
     ▼
 FastAPI Backend
-    ├── STT: faster-whisper  ──── your speech → text
-    ├── LLM: Ollama (local)   ──── assessment + follow-ups
-    │    or DeepSeek API      ──── (optional, API-based)
-    ├── TTS: Kokoro           ──── text → interviewer speech
-    └── SQLite               ──── sessions, scores, progress
+    ├── Interview router      ──── realtime interview loop
+    ├── Questions router      ──── bank CRUD, upload, practice sets
+    ├── Resume router         ──── document parsing + question generation
+    ├── Practice router       ──── hints, quizzes, deep dives, tutor chat
+    ├── Progress router       ──── history, mastery, stats, DB browser
+    ├── STT engines           ──── faster-whisper, Moonshine, Groq, Deepgram
+    ├── LLM providers         ──── Ollama, DeepSeek, Gemini
+    ├── TTS engines           ──── Kokoro, Apple, Piper, Cartesia, Deepgram
+    └── SQLite                ──── sessions, questions, scores, resumes
 ```
 
-All models run **100% locally** — no API keys, no internet required after setup (DeepSeek is optional and API-based).
+Local execution is the primary path. Cloud integrations are optional and exist to expand experimentation, provider comparisons, and fallback options, not to redefine the app as cloud-first.
+
+## Current Capabilities
+
+- `Dashboard`: start interviews, choose topic, company, and model, review stats, and export practice material
+- `Interview Room`: spoken interviewer prompts, waveform UI, transcript stream, and scoring overlay
+- `Settings`: provider configuration, API key management, question-bank upload, and local model selection
+- `Practice`: tutor chat plus AI-generated hints, concepts, approaches, sample answers, quizzes, deep dives, and answer analysis
+- `Resume / Document Tools`: upload PDF, DOCX, TXT, or topic text and generate structured interview questions
+- `Database Viewer`: inspect and delete rows from core SQLite tables inside the app
 
 ---
 
@@ -170,8 +192,7 @@ pip install --upgrade pip
 
 ```bash
 # 3d. Install all dependencies
-# Note: First run will download the Whisper model (~1.5 GB) and Kokoro TTS (~300 MB)
-# This can take 5–10 minutes depending on your connection.
+# Note: first run may download local model assets such as Whisper / Kokoro.
 pip install -r requirements.txt
 ```
 
@@ -306,7 +327,20 @@ http://localhost:3000
 
 ---
 
-### Step 9 — (Optional) Add DeepSeek API key
+### Step 9 — Optional provider configuration
+
+You can stop after Step 8 if you want a local-only setup. The app works that way by default.
+
+Optional integrations currently exposed by the codebase:
+- `DeepSeek` for cloud LLM inference
+- `Gemini` for cloud LLM inference
+- `Groq` for cloud speech-to-text
+- `Deepgram` for cloud speech-to-text and text-to-speech
+- `Cartesia` for cloud text-to-speech
+- `Moonshine` as a lightweight local STT alternative
+- `Piper` and `Apple` as local TTS alternatives
+
+### Example: add a DeepSeek API key
 
 To use DeepSeek V3 (`deepseek-chat`) or R1 (`deepseek-reasoner`):
 
@@ -346,11 +380,12 @@ Sample files are already in `data/question_banks/` — you can open them to see 
 | `npm run dev` fails | Run `node --version` — must be 18+. Upgrade: `brew upgrade node` |
 | Port 8000 already in use | `lsof -ti:8000 \| xargs kill` then restart uvicorn |
 | DeepSeek returns 401 | API key is wrong or expired — remove and re-add in Settings |
+| Gemini / Groq / Deepgram / Cartesia features do not work | Confirm the matching API key is saved in Settings and that the selected provider supports the capability you picked |
 | Score always 0 | The LLM returned malformed JSON. Try a larger model (`qwen2.5:14b`) or check backend logs |
 
 ---
 
-## Model Recommendations (M4 24GB)
+## Model and Engine Notes (M4 24GB)
 
 | Model | Size | Use Case | Quality |
 |-------|------|----------|---------|
@@ -361,10 +396,14 @@ Sample files are already in `data/question_banks/` — you can open them to see 
 
 STT (speech-to-text):
 - `whisper large-v3-turbo` — default, best speed/accuracy on M4 (uses CoreML)
+- `moonshine/tiny` or `moonshine/base` — lightweight local alternatives
+- `groq whisper-large-v3-turbo` and `deepgram nova-3` — optional cloud STT paths
 
 TTS (interviewer voice):
 - `kokoro-82M` — default, ~50ms latency, very natural
-- Fallback: macOS `say` (built-in, zero dependencies)
+- `apple` — built-in macOS voice fallback
+- `piper` — lightweight local TTS option
+- `cartesia` and `deepgram` — optional cloud TTS paths
 
 ---
 
@@ -406,7 +445,7 @@ Scores are stored in SQLite and visualized on the dashboard.
 
 ## SQLite Database
 
-The app stores everything in a single SQLite file at `data/voicelearning.db`.
+The app stores its working data in a single SQLite file at `data/voicelearning.db`.
 
 ### Tables
 
@@ -417,6 +456,8 @@ The app stores everything in a single SQLite file at `data/voicelearning.db`.
 | `responses` | Your spoken answers, transcribed |
 | `scores` | Per-answer rubric breakdown (technical, depth, clarity, process) |
 | `topic_mastery` | Rolling average score per topic across all sessions |
+| `resumes` | Uploaded documents and parsed text used for question generation |
+| `session_questions` | The exact question order selected for each interview session |
 
 ### In-app Database Viewer
 
@@ -470,7 +511,7 @@ voice-learning-ai/
 │   ├── requirements.txt
 │   ├── config.py               # model paths, Ollama URL, settings
 │   ├── db/
-│   │   ├── database.py         # SQLite connection (SQLAlchemy)
+│   │   ├── database.py         # SQLite connection + schema init
 │   │   └── schema.sql
 │   ├── models/
 │   │   ├── session.py
@@ -479,36 +520,36 @@ voice-learning-ai/
 │   ├── routers/
 │   │   ├── interview.py        # WebSocket interview loop
 │   │   ├── questions.py        # CRUD + CSV upload
-│   │   └── progress.py        # stats & history
+│   │   ├── progress.py         # stats, history, DB browser
+│   │   ├── resume.py           # resume/doc-based generation
+│   │   └── practice.py         # guided study endpoints
 │   └── services/
-│       ├── stt.py              # faster-whisper wrapper
-│       ├── tts.py              # Kokoro TTS wrapper
-│       ├── llm.py              # Ollama client
+│       ├── stt.py              # local + cloud STT routing
+│       ├── tts.py              # local + cloud TTS routing
+│       ├── llm.py              # Ollama + cloud LLM routing
 │       └── assessor.py         # scoring engine
 ├── frontend/
 │   ├── package.json
-│   ├── .env.example
 │   └── src/
 │       ├── app/
 │       │   ├── page.tsx              # redirect to dashboard
 │       │   ├── dashboard/page.tsx    # progress & history
+│       │   ├── generate/page.tsx     # resume/topic-based generation
 │       │   ├── interview/
 │       │   │   └── [sessionId]/page.tsx  # interview room
-│       │   └── settings/page.tsx     # model config, uploads
+│       │   ├── practice/[questionId]/page.tsx  # guided practice
+│       │   ├── database/page.tsx     # in-app DB browser
+│       │   └── settings/page.tsx     # provider config, uploads
 │       ├── components/
 │       │   ├── interview/
-│       │   │   ├── InterviewRoom.tsx  # main Teams-like layout
-│       │   │   ├── VideoPanel.tsx     # AI avatar + waveform
+│       │   │   ├── InterviewRoom.tsx  # main interview layout
+│       │   │   ├── Waveform.tsx
 │       │   │   ├── TranscriptPanel.tsx
 │       │   │   └── ScoreOverlay.tsx
 │       │   ├── dashboard/
-│       │   │   ├── TopicRadar.tsx     # spider chart of mastery
-│       │   │   ├── SessionHistory.tsx
-│       │   │   └── ProgressBar.tsx
-│       │   └── ui/                   # shadcn/ui components
+│       │   │   └── TopicRadar.tsx     # mastery visualization
 │       ├── hooks/
 │       │   ├── useAudioRecorder.ts
-│       │   ├── useWebSocket.ts
 │       │   └── useInterview.ts
 │       └── lib/
 │           └── api.ts
@@ -526,15 +567,22 @@ voice-learning-ai/
 
 ## Configuration
 
-Edit [backend/config.py](backend/config.py) to change models:
+Runtime defaults live in [backend/config.py](backend/config.py) and can also be changed from the app's Settings page, which persists updates into `backend/.env`.
 
 ```python
-OLLAMA_MODEL = "llama3.1:8b"          # LLM for assessment
-WHISPER_MODEL = "large-v3-turbo"      # STT model
-TTS_VOICE = "af_heart"                # Kokoro voice ID
-OLLAMA_BASE_URL = "http://localhost:11434"
-DATABASE_PATH = "../data/voicelearning.db"
+ollama_model = "llama3.1:8b"
+stt_engine = "whisper"
+whisper_model = "large-v3-turbo"
+tts_engine = "kokoro"
+tts_voice = "af_heart"
+database_path = "../data/voicelearning.db"
 ```
+
+## Local-First Positioning
+
+- The main path is still local: Ollama for LLMs, local STT/TTS options, and SQLite for storage.
+- Optional cloud and exploratory integrations do not change the core design goal; they extend the app for experimentation and provider flexibility.
+- If you enable DeepSeek, Gemini, Groq, Deepgram, or Cartesia, that specific capability becomes cloud-backed, but the application architecture and stored data remain local-first.
 
 ---
 

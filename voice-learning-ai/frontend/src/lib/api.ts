@@ -154,11 +154,11 @@ export const api = {
       body: JSON.stringify({ model }),
     }),
 
-  startSession: (topic: string, model?: string, company?: string, title?: string) =>
-    request<{ session_id: number; questions: Question[]; total: number }>("/interview/start", {
+  startSession: (topic: string, model?: string, company?: string, title?: string, followUpMode = false) =>
+    request<{ session_id: number; questions: Question[]; total: number; follow_up_mode: boolean }>("/interview/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ topic, company, model_used: model, title }),
+      body: JSON.stringify({ topic, company, model_used: model, title, follow_up_mode: followUpMode }),
     }),
 
   listTopics: () => request<{ topic: string; count: number }[]>("/questions/topics"),
@@ -334,6 +334,26 @@ export const api = {
       body: JSON.stringify({ message, history, model }),
     }),
 
+  practiceFollowup: (
+    questionId: number,
+    opts: {
+      history: FollowupTurn[];
+      model?: string;
+      answerText?: string;
+      audio?: Blob;
+    },
+  ) => {
+    const fd = new FormData();
+    fd.append("history", JSON.stringify(opts.history ?? []));
+    if (opts.model) fd.append("model", opts.model);
+    if (opts.answerText) fd.append("answer_text", opts.answerText);
+    if (opts.audio) fd.append("audio", opts.audio, "followup.webm");
+    return request<PracticeFollowupResponse>(`/practice/${questionId}/followup`, {
+      method: "POST",
+      body: fd,
+    });
+  },
+
   analyseAnswer: (
     questionId: number,
     transcript: string,
@@ -368,10 +388,37 @@ export interface Session {
   id: number;
   title: string;
   topic: string;
+  follow_up_mode?: boolean;
   status: "active" | "completed" | "abandoned";
   total_score?: number;
   started_at: string;
   ended_at?: string;
+}
+
+export interface FollowupTurn {
+  round: number;
+  interviewer_prompt: string;
+  candidate_answer: string;
+  understanding_score: number;
+  coach_feedback: string;
+  deeper_explanation: string;
+  hint: string;
+  next_question: string;
+  what_they_now_understand: string[];
+  remaining_gaps: string[];
+}
+
+export interface FollowupReport {
+  understanding_score: number;
+  overall_assessment: string;
+  strengths: string[];
+  remaining_gaps: string[];
+  concepts_mastered: string[];
+  concepts_to_review: string[];
+  recommended_drills: string[];
+  ideal_answer_extension: string;
+  rounds_completed?: number;
+  turns?: FollowupTurn[];
 }
 
 export interface TopicMastery {
@@ -404,6 +451,17 @@ export interface SessionResponse {
   communication_clarity: number;
   problem_solving: number;
   llm_feedback: string;
+  followup_report?: FollowupReport | null;
+}
+
+export interface PracticeFollowupResponse {
+  round: number;
+  complete: boolean;
+  transcript: string;
+  assistant_text: string;
+  understanding_score: number;
+  report: FollowupReport | null;
+  turns: FollowupTurn[];
 }
 
 export interface ResumeEntry {

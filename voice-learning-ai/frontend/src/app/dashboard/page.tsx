@@ -134,6 +134,7 @@ export default function DashboardPage() {
   const [selectedTopic, setSelectedTopic] = useState("random");
   const [selectedCompany, setSelectedCompany] = useState("all");
   const [selectedModel, setSelectedModel] = useState<string>("");
+  const [followUpMode, setFollowUpMode] = useState(false);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState("");
 
@@ -278,7 +279,7 @@ export default function DashboardPage() {
     setStarting(true);
     setStartError("");
     try {
-      const res = await api.startSession(selectedTopic, selectedModel, selectedCompany);
+      const res = await api.startSession(selectedTopic, selectedModel, selectedCompany, undefined, followUpMode);
       const label = selectedCompany === "all"
         ? selectedTopic
         : `${selectedCompany} · ${selectedTopic}`;
@@ -318,6 +319,10 @@ export default function DashboardPage() {
             <button onClick={() => router.push("/generate")}
               className="flex items-center gap-1.5 px-3 py-2 bg-blue-900/60 hover:bg-blue-900 border border-blue-800 rounded-lg text-sm text-blue-300">
               <Sparkles size={14} /> Generate
+            </button>
+            <button onClick={() => router.push("/practice")}
+              className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300">
+              <BookOpen size={14} /> Practice
             </button>
             <button onClick={() => router.push("/settings")}
               className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm">
@@ -434,7 +439,6 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Start button */}
             <div className="self-end">
               <button
                 onClick={handleStart}
@@ -446,6 +450,31 @@ export default function DashboardPage() {
               </button>
             </div>
           </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-blue-900/40 pt-4">
+            <span className="text-xs font-medium text-gray-400">Interview mode</span>
+            <button
+              type="button"
+              onClick={() => setFollowUpMode((value) => !value)}
+              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                followUpMode
+                  ? "border-emerald-700 bg-emerald-950/40 text-emerald-200"
+                  : "border-gray-700 bg-gray-800 text-gray-300"
+              }`}
+            >
+              <span className={`h-2 w-2 rounded-full ${followUpMode ? "bg-emerald-400" : "bg-gray-500"}`} />
+              Follow-up mode
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                followUpMode ? "bg-emerald-900 text-emerald-300" : "bg-gray-700 text-gray-400"
+              }`}>
+                {followUpMode ? "ON" : "OFF"}
+              </span>
+            </button>
+            <p className="text-xs text-gray-500">
+              Stay on the same question longer for deeper probing, hints, and explanations.
+            </p>
+          </div>
+
           {startError && (
             <p className="mt-3 text-sm text-red-400 bg-red-950/40 border border-red-900 rounded-lg px-3 py-2">
               {startError}

@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     title       TEXT,
     topic       TEXT,
     model_used  TEXT,
+    follow_up_mode INTEGER DEFAULT 0,
     status      TEXT CHECK(status IN ('active','completed','abandoned')) DEFAULT 'active',
     total_score REAL,
     started_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -70,7 +71,17 @@ CREATE TABLE IF NOT EXISTS resumes (
     uploaded_at         DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS response_followups (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    response_id         INTEGER NOT NULL UNIQUE REFERENCES responses(id),
+    turns_json          TEXT NOT NULL,
+    report_json         TEXT NOT NULL,
+    understanding_score REAL,
+    created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_responses_session ON responses(session_id);
 CREATE INDEX IF NOT EXISTS idx_scores_response ON scores(response_id);
 CREATE INDEX IF NOT EXISTS idx_questions_topic ON questions(topic);
 CREATE INDEX IF NOT EXISTS idx_session_questions_session ON session_questions(session_id);
+CREATE INDEX IF NOT EXISTS idx_response_followups_response ON response_followups(response_id);

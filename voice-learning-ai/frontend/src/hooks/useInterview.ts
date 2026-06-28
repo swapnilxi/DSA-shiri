@@ -3,7 +3,13 @@ import { useRef, useState, useCallback } from "react";
 import { WS_URL } from "@/lib/api";
 
 export type InterviewEvent =
+  | { type: "session_config"; follow_up_mode: boolean }
   | { type: "question"; index: number; total: number; text: string; topic: string; difficulty: string }
+  | { type: "interviewer_message"; text: string; mode: string; question_index: number | null; round: number | null }
+  | { type: "followup_state"; round: number; max_rounds: number; question_index: number }
+  | { type: "followup_report"; report: InterviewFollowupReport }
+  | { type: "audio_start" }
+  | { type: "audio_end" }
   | { type: "transcript"; text: string }
   | { type: "score"; score: ScoreBreakdown }
   | { type: "status"; message: string }
@@ -18,6 +24,32 @@ export interface ScoreBreakdown {
   total: number;
   llm_feedback: string;
   follow_up_asked?: string;
+}
+
+export interface InterviewFollowupTurn {
+  round: number;
+  interviewer_prompt: string;
+  candidate_answer: string;
+  understanding_score: number;
+  coach_feedback: string;
+  deeper_explanation: string;
+  hint: string;
+  next_question: string;
+  what_they_now_understand: string[];
+  remaining_gaps: string[];
+}
+
+export interface InterviewFollowupReport {
+  understanding_score: number;
+  overall_assessment: string;
+  strengths: string[];
+  remaining_gaps: string[];
+  concepts_mastered: string[];
+  concepts_to_review: string[];
+  recommended_drills: string[];
+  ideal_answer_extension: string;
+  rounds_completed?: number;
+  turns?: InterviewFollowupTurn[];
 }
 
 export function useInterview(sessionId: number | null) {
@@ -40,8 +72,9 @@ export function useInterview(sessionId: number | null) {
 
     socket.onmessage = async (msg) => {
       if (msg.data instanceof ArrayBuffer) {
-        // Audio from server (TTS) — play it
+        pushEvent({ type: "audio_start" });
         await playAudio(msg.data);
+        pushEvent({ type: "audio_end" });
       } else {
         const event: InterviewEvent = JSON.parse(msg.data);
         pushEvent(event);
@@ -71,10 +104,13 @@ export function useInterview(sessionId: number | null) {
       audioCtx.current = new AudioContext();
     }
     const decoded = await audioCtx.current.decodeAudioData(buf.slice(0));
-    const source = audioCtx.current.createBufferSource();
-    source.buffer = decoded;
-    source.connect(audioCtx.current.destination);
-    source.start();
+    await new Promise<void>((resolve) => {
+      const source = audioCtx.current!.createBufferSource();
+      source.buffer = decoded;
+      source.connect(audioCtx.current!.destination);
+      source.onended = () => resolve();
+      source.start();
+    });
   }
 
   return { connect, disconnect, sendAudio, sendControl, events, connected };

@@ -6,10 +6,11 @@ import os
 from typing import Optional
 
 import aiosqlite
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from config import settings
+from services import assessor, stt
 from services.llm import chat
 
 router = APIRouter(prefix="/practice", tags=["practice"])
@@ -207,6 +208,137 @@ class AnalyseAnswerRequest(BaseModel):
     transcript: str
     scores: dict = {}
     model: Optional[str] = None
+
+
+def _followup_should_continue(round_number: int, understanding_score: float) -> bool:
+    if round_number >= 5:
+        return False
+    if round_number < 2:
+        return True
+    return understanding_score < 86
+
+
+def _followup_text(review: dict, continue_loop: bool) -> str:
+    return assessor.compose_followup_message(review, continue_loop)
+
+
+@router.post("/{question_id}/followup")
+async def practice_followup(
+    question_id: int,
+    history: str = Form(default="[]"),
+    model: Optional[str] = Form(default=None),
+    answer_text: Optional[str] = Form(default=None),
+    audio: Optional[UploadFile] = File(default=None),
+):
+    q = await _get_question(question_id)
+
+    try:
+        turns = _json.loads(history or "[]")
+    except _json.JSONDecodeError:
+        raise HTTPException(400, "History must be valid JSON")
+    if not isinstance(turns, list):
+        raise HTTPException(400, "History must be a JSON array")
+
+    cleaned_turns = [turn for turn in turns if isinstance(turn, dict)]
+
+    if not answer_text and audio is None and not cleaned_turns:
+        opening = await assessor.generate_followup_opening(
+            question=q["question"],
+            topic=q.get("topic") or "",
+            category=q.get("category") or "",
+            difficulty=q.get("difficulty") or "Medium",
+            expected_keywords=q.get("expected_keywords") or "",
+            model=model,
+        )
+        seed_turns = [
+            {
+                "round": 0,
+                "interviewer_prompt": opening["assistant_text"],
+                "candidate_answer": "",
+                "understanding_score": 0,
+                "coach_feedback": "",
+                "deeper_explanation": "",
+                "hint": "",
+                "next_question": opening["first_question"],
+                "what_they_now_understand": [],
+                "remaining_gaps": opening["focus_areas"],
+            }
+        ]
+        return {
+            "round": 0,
+            "complete": False,
+            "transcript": "",
+            "assistant_text": opening["assistant_text"],
+            "understanding_score": 0,
+            "report": None,
+            "turns": seed_turns,
+        }
+
+    if audio is not None:
+        raw_audio = await audio.read()
+        transcript, _ = await stt.transcribe(raw_audio)
+    else:
+        transcript = (answer_text or "").strip()
+
+    if not transcript:
+        raise HTTPException(400, "Provide either answer_text or audio")
+
+    original_answer = next(
+        (str(turn.get("candidate_answer", "")).strip() for turn in cleaned_turns if str(turn.get("candidate_answer", "")).strip()),
+        transcript,
+    )
+    round_number = len(cleaned_turns)
+
+    review = await assessor.review_followup_answer(
+        question=q["question"],
+        original_answer=original_answer,
+        latest_answer=transcript,
+        turns=cleaned_turns,
+        round_number=round_number,
+        expected_keywords=q.get("expected_keywords") or "",
+        model=model,
+    )
+    continue_loop = _followup_should_continue(round_number, review["understanding_score"])
+    assistant_text = _followup_text(review, continue_loop)
+
+    updated_turns = cleaned_turns + [
+        {
+            "round": round_number,
+            "interviewer_prompt": cleaned_turns[-1]["next_question"] if cleaned_turns and cleaned_turns[-1].get("next_question") else "",
+            "candidate_answer": transcript,
+            "understanding_score": review["understanding_score"],
+            "coach_feedback": review["coach_feedback"],
+            "deeper_explanation": review["deeper_explanation"],
+            "hint": review["hint"],
+            "next_question": review["next_question"],
+            "what_they_now_understand": review["what_they_now_understand"],
+            "remaining_gaps": review["remaining_gaps"],
+        }
+    ]
+
+    report = None
+    if not continue_loop:
+        completed_turns = [turn for turn in updated_turns if str(turn.get("candidate_answer", "")).strip()]
+        report = await assessor.generate_followup_report(
+            question=q["question"],
+            original_answer=original_answer,
+            initial_feedback="Practice follow-up mode",
+            turns=completed_turns,
+            expected_keywords=q.get("expected_keywords") or "",
+            model=model,
+        )
+        report["turns"] = completed_turns
+        report["rounds_completed"] = len(completed_turns)
+
+    return {
+        "round": round_number,
+        "complete": not continue_loop,
+        "transcript": transcript,
+        "assistant_text": assistant_text,
+        "understanding_score": review["understanding_score"],
+        "report": report,
+        "turns": updated_turns,
+    }
 
 
 @router.post("/{question_id}/analyse-answer")

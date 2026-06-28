@@ -10,6 +10,7 @@ class SessionCreate(BaseModel):
     company: Optional[str] = None
     title: Optional[str] = None
     model_used: Optional[str] = None
+    follow_up_mode: bool = False
 
 
 class SessionOut(BaseModel):
@@ -19,6 +20,7 @@ class SessionOut(BaseModel):
     title: Optional[str]
     topic: str
     model_used: Optional[str]
+    follow_up_mode: bool = False
     status: str
     total_score: Optional[float]
     started_at: datetime

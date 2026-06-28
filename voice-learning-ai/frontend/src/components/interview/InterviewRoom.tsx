@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, PhoneOff, Send, Volume2 } from "lucide-react";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
-import { useInterview, ScoreBreakdown } from "@/hooks/useInterview";
+import { InterviewFollowupReport, useInterview, ScoreBreakdown } from "@/hooks/useInterview";
 import { Waveform } from "./Waveform";
 import { ScoreOverlay } from "./ScoreOverlay";
 
@@ -24,7 +24,14 @@ export function InterviewRoom({ sessionId, topic, onEnd }: Props) {
   const [finalScore, setFinalScore] = useState(0);
   const [processingSeconds, setProcessingSeconds] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isInterviewerSpeaking, setIsInterviewerSpeaking] = useState(false);
+  const [followUpMode, setFollowUpMode] = useState(false);
+  const [spokenText, setSpokenText] = useState("");
+  const [followUpRound, setFollowUpRound] = useState<number | null>(null);
+  const [latestFollowUpReport, setLatestFollowUpReport] = useState<InterviewFollowupReport | null>(null);
   const submittingRef = useRef(false);
+  const processedEvents = useRef(0);
+  const followUpModeRef = useRef(false);
 
   useEffect(() => {
     interview.connect();
@@ -32,20 +39,54 @@ export function InterviewRoom({ sessionId, topic, onEnd }: Props) {
   }, []);
 
   useEffect(() => {
-    for (const event of interview.events) {
+    const nextEvents = interview.events.slice(processedEvents.current);
+    processedEvents.current = interview.events.length;
+    for (const event of nextEvents) {
+      if (event.type === "session_config") {
+        followUpModeRef.current = event.follow_up_mode;
+        setFollowUpMode(event.follow_up_mode);
+      }
+      if (event.type === "audio_start") {
+        setIsInterviewerSpeaking(true);
+        setStatus("Interviewer is speaking...");
+      }
+      if (event.type === "audio_end") {
+        setIsInterviewerSpeaking(false);
+        setStatus((current) => current === "Interviewer is speaking..." ? "Your turn." : current);
+      }
+      if (event.type === "interviewer_message") {
+        setIsInterviewerSpeaking(true);
+        setSpokenText(event.text);
+        if (event.mode === "followup" || event.mode === "followup_summary") {
+          setFollowUpRound(event.round);
+        }
+        if (event.mode === "question") {
+          setFollowUpRound(null);
+          setLatestFollowUpReport(null);
+        }
+      }
       if (event.type === "question") {
         setCurrentQ({ text: event.text, index: event.index, total: event.total, difficulty: event.difficulty });
         setLastScore(null);
         setTranscript("");
         setProcessingSeconds(null);
-        setStatus("Interviewer is speaking...");
+        setSpokenText("");
+        setFollowUpRound(null);
+        setLatestFollowUpReport(null);
       }
       if (event.type === "status") setStatus(event.message);
       if (event.type === "transcript") setTranscript(event.text);
       if (event.type === "score") {
         setLastScore(event.score);
         setProcessingSeconds(null);
-        setStatus("Review your feedback — the next question will follow shortly.");
+        setStatus(followUpModeRef.current ? "Score saved. Entering follow-up mode..." : "Review your feedback — the next question will follow shortly.");
+      }
+      if (event.type === "followup_state") {
+        setFollowUpRound(event.round);
+      }
+      if (event.type === "followup_report") {
+        setLatestFollowUpReport(event.report);
+        setStatus("Saved follow-up report for this question.");
       }
       if (event.type === "session_complete") {
         setIsComplete(true);
@@ -60,7 +101,7 @@ export function InterviewRoom({ sessionId, topic, onEnd }: Props) {
     setIsSubmitting(true);
     try {
       const blob = await recorder.stop();
-      setProcessingSeconds(30);
+      setProcessingSeconds(followUpModeRef.current ? null : 30);
       setStatus("Submitting answer for feedback...");
       await interview.sendAudio(blob);
     } finally {
@@ -68,6 +109,16 @@ export function InterviewRoom({ sessionId, topic, onEnd }: Props) {
       setIsSubmitting(false);
     }
   }, [interview.sendAudio, recorder.isRecording, recorder.stop]);
+
+  const handleNextQuestion = useCallback(() => {
+    if (recorder.isRecording || isSubmitting || isInterviewerSpeaking) return;
+    setProcessingSeconds(null);
+    setStatus("Moving to the next question...");
+    setFollowUpRound(null);
+    setLatestFollowUpReport(null);
+    setSpokenText("");
+    interview.sendControl("next");
+  }, [interview, isInterviewerSpeaking, isSubmitting, recorder.isRecording]);
 
   useEffect(() => {
     if (processingSeconds === null || processingSeconds <= 0) return;
@@ -82,7 +133,7 @@ export function InterviewRoom({ sessionId, topic, onEnd }: Props) {
   }, [processingSeconds]);
 
   async function handleRecord() {
-    if (recorder.isRecording || isSubmitting || processingSeconds !== null) return;
+    if (recorder.isRecording || isSubmitting || isInterviewerSpeaking || processingSeconds !== null) return;
     await recorder.start();
     setStatus("Recording — take as long as you need, then click Submit.");
   }
@@ -126,15 +177,34 @@ export function InterviewRoom({ sessionId, topic, onEnd }: Props) {
             🤖
           </div>
           <p className="text-gray-400 text-sm mb-3">AI Interviewer</p>
-          <Waveform active={status === "Interviewer is speaking..."} volume={0.6} color="#60a5fa" />
+          <Waveform active={isInterviewerSpeaking} volume={0.6} color="#60a5fa" />
+          <div className="absolute top-6 left-6 flex items-center gap-2">
+            {followUpMode && (
+              <span className="rounded-full bg-emerald-900/70 px-3 py-1 text-xs font-semibold text-emerald-300">
+                Follow-up mode
+              </span>
+            )}
+            {followUpRound !== null && followUpRound > 0 && (
+              <span className="rounded-full bg-blue-900/70 px-3 py-1 text-xs font-semibold text-blue-300">
+                Round {followUpRound}
+              </span>
+            )}
+          </div>
           {currentQ && (
             <div className="absolute bottom-6 left-6 right-6 bg-gray-800/80 backdrop-blur rounded-xl p-4 text-sm text-gray-200 leading-relaxed">
-              {currentQ.text}
+              <p className="text-xs uppercase tracking-wider text-gray-500 mb-2">Current question</p>
+              <p>{currentQ.text}</p>
               <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${
                 currentQ.difficulty === "Hard" ? "bg-red-900 text-red-300" :
                 currentQ.difficulty === "Medium" ? "bg-yellow-900 text-yellow-300" :
                 "bg-green-900 text-green-300"
               }`}>{currentQ.difficulty}</span>
+            </div>
+          )}
+          {spokenText && (
+            <div className="absolute top-28 left-6 right-6 bg-gray-950/75 border border-blue-900/60 rounded-xl p-4 text-sm text-blue-100 leading-relaxed shadow-xl">
+              <p className="text-xs uppercase tracking-wider text-blue-400 mb-2">What the interviewer is saying</p>
+              <p>{spokenText}</p>
             </div>
           )}
         </div>
@@ -156,6 +226,18 @@ export function InterviewRoom({ sessionId, topic, onEnd }: Props) {
 
       {/* Score overlay */}
       {lastScore && <ScoreOverlay score={lastScore} />}
+      {latestFollowUpReport && (
+        <div className="absolute left-4 top-16 w-80 bg-gray-900/95 backdrop-blur border border-emerald-800 rounded-2xl p-4 shadow-2xl">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Follow-up report</span>
+            <span className="text-lg font-bold text-emerald-300">
+              {latestFollowUpReport.understanding_score.toFixed(0)}
+              <span className="text-xs text-gray-500">/100</span>
+            </span>
+          </div>
+          <p className="text-xs text-gray-300 leading-relaxed">{latestFollowUpReport.overall_assessment}</p>
+        </div>
+      )}
 
       {/* Bottom control bar */}
       <div className="flex items-center justify-between px-8 py-4 bg-gray-900 border-t border-gray-800">
@@ -172,7 +254,7 @@ export function InterviewRoom({ sessionId, topic, onEnd }: Props) {
         <div className="flex items-center gap-3">
           <button
             onClick={handleRecord}
-            disabled={recorder.isRecording || isSubmitting || processingSeconds !== null}
+            disabled={recorder.isRecording || isSubmitting || isInterviewerSpeaking || processingSeconds !== null}
             className={`w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg transition-all disabled:cursor-not-allowed ${
               recorder.isRecording
                 ? "bg-red-600 scale-110 animate-pulse"
@@ -191,10 +273,21 @@ export function InterviewRoom({ sessionId, topic, onEnd }: Props) {
             <Send size={16} />
             {isSubmitting ? "Submitting..." : "Submit answer"}
           </button>
+
+          {followUpMode && lastScore && (
+            <button
+              onClick={handleNextQuestion}
+              disabled={recorder.isRecording || isSubmitting || isInterviewerSpeaking}
+              className="flex items-center gap-2 px-4 py-3 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-sm font-medium"
+              title={isInterviewerSpeaking ? "Wait for the interviewer feedback to finish first" : "Move to the next question"}
+            >
+              Next question
+            </button>
+          )}
         </div>
 
         <div className="text-xs text-gray-500 flex items-center gap-1">
-          <Volume2 size={14} /> Local AI
+          <Volume2 size={14} /> {followUpMode ? "Interviewer + follow-up coach" : "Local AI"}
         </div>
       </div>
     </div>
