@@ -76,22 +76,22 @@ async def start_session(body: SessionCreate):
 async def interview_ws(websocket: WebSocket, session_id: int):
     await websocket.accept()
 
-    session = await _get_session(session_id)
-    if not session:
-        await websocket.send_json({"type": "error", "message": "Session not found"})
-        await websocket.close()
-        return
-
-    topic = session["topic"]
-    session_model: str | None = session.get("model_used") or None
-    follow_up_mode = bool(session.get("follow_up_mode"))
-    questions = await _get_session_questions(session_id)
-
-    await websocket.send_json({"type": "session_config", "follow_up_mode": follow_up_mode})
-
-    q_index = 0
-
     try:
+        session = await _get_session(session_id)
+        if not session:
+            await websocket.send_json({"type": "error", "message": "Session not found"})
+            await websocket.close()
+            return
+
+        topic = session["topic"]
+        session_model: str | None = session.get("model_used") or None
+        follow_up_mode = bool(session.get("follow_up_mode"))
+        questions = await _get_session_questions(session_id)
+
+        await websocket.send_json({"type": "session_config", "follow_up_mode": follow_up_mode})
+
+        q_index = 0
+
         while q_index < len(questions):
             q = questions[q_index]
 

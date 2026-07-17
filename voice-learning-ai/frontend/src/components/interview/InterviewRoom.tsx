@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, PhoneOff, Send, Volume2 } from "lucide-react";
+import { Mic, PhoneOff, Send, Volume2, FileText, X } from "lucide-react";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { InterviewFollowupReport, useInterview, ScoreBreakdown } from "@/hooks/useInterview";
 import { Waveform } from "./Waveform";
@@ -29,6 +29,7 @@ export function InterviewRoom({ sessionId, topic, onEnd }: Props) {
   const [spokenText, setSpokenText] = useState("");
   const [followUpRound, setFollowUpRound] = useState<number | null>(null);
   const [latestFollowUpReport, setLatestFollowUpReport] = useState<InterviewFollowupReport | null>(null);
+  const [showEndModal, setShowEndModal] = useState(false);
   const submittingRef = useRef(false);
   const processedEvents = useRef(0);
   const followUpModeRef = useRef(false);
@@ -151,6 +152,7 @@ export function InterviewRoom({ sessionId, topic, onEnd }: Props) {
   }
 
   return (
+    <>
     <div className="h-screen bg-gray-950 text-white flex flex-col">
       {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-3 bg-gray-900 border-b border-gray-800">
@@ -163,8 +165,10 @@ export function InterviewRoom({ sessionId, topic, onEnd }: Props) {
             Question {currentQ.index + 1} / {currentQ.total}
           </span>
         )}
-        <button onClick={() => { interview.sendControl("end"); onEnd(); }}
-          className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded-lg text-sm">
+        <button
+          onClick={() => setShowEndModal(true)}
+          className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded-lg text-sm transition-colors"
+        >
           <PhoneOff size={14} /> End
         </button>
       </div>
@@ -291,5 +295,57 @@ export function InterviewRoom({ sessionId, topic, onEnd }: Props) {
         </div>
       </div>
     </div>
+
+    {/* End session confirmation modal */}
+    {showEndModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl p-8 w-full max-w-sm mx-4 flex flex-col gap-5">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-white">End session?</h2>
+            <button
+              onClick={() => setShowEndModal(false)}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+              aria-label="Close"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <p className="text-sm text-gray-400 leading-relaxed">
+            Your progress has been saved. What would you like to do?
+          </p>
+
+          {/* Actions */}
+          <div className="flex flex-col gap-3">
+            {/* View Report — primary action */}
+            <button
+              onClick={() => {
+                interview.sendControl("end");
+                onEnd();
+              }}
+              className="flex items-center justify-center gap-2.5 w-full px-5 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-semibold text-white transition-colors shadow-lg"
+            >
+              <FileText size={16} />
+              View Report
+            </button>
+
+            {/* End Call — destructive action */}
+            <button
+              onClick={() => {
+                interview.sendControl("end");
+                interview.disconnect();
+                window.location.href = "/dashboard";
+              }}
+              className="flex items-center justify-center gap-2.5 w-full px-5 py-3 bg-gray-800 hover:bg-red-900/60 border border-gray-700 hover:border-red-700 rounded-xl text-sm font-semibold text-gray-300 hover:text-red-300 transition-colors"
+            >
+              <PhoneOff size={16} />
+              End Call
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

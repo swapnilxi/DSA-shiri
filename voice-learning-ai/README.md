@@ -252,12 +252,22 @@ macOS blocks microphone access until explicitly allowed.
 
 ### Step 6 — Run the app
 
-You need **three terminals** total (Ollama from Step 2, plus two new ones):
+You need **two terminals** if using the launch script, or **three terminals** if running manually (Ollama from Step 2, plus backend/frontend terminals):
 
 **Terminal 1 — Ollama** (already running from Step 2b):
 ```
 ollama serve      ← keep this running
 ```
+
+#### Option A: Run Frontend & Backend Together (Recommended)
+
+In **Terminal 2**, run the launch script from the repository root:
+```bash
+./start.sh
+```
+This starts both the backend (FastAPI) and frontend (Next.js) dev servers simultaneously. Press `Ctrl+C` once to shut down both.
+
+#### Option B: Run Frontend & Backend Manually
 
 **Terminal 2 — Backend:**
 ```bash
