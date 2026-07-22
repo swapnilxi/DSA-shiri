@@ -81,6 +81,24 @@ async def get_models():
     }
 
 
+@app.get("/settings")
+async def get_settings():
+    """Current app configuration (engines, models, key status)."""
+    return {
+        "ollama_model": settings.ollama_model,
+        "stt_engine": settings.stt_engine,
+        "tts_engine": settings.tts_engine,
+        "whisper_model": settings.whisper_model,
+        "moonshine_model": settings.moonshine_model,
+        "tts_voice": settings.tts_voice,
+        "deepseek_configured": bool(settings.deepseek_api_key),
+        "gemini_configured": bool(settings.gemini_api_key),
+        "cartesia_configured": bool(settings.cartesia_api_key),
+        "deepgram_configured": bool(settings.deepgram_api_key),
+        "groq_configured": bool(settings.groq_api_key),
+    }
+
+
 class DeepSeekKeyBody(BaseModel):
     api_key: str
 

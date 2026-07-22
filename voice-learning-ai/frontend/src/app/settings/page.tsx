@@ -506,10 +506,7 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-2xl mx-auto">
-        <button onClick={() => router.push("/dashboard")}
-          className="flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-6">
-          <ArrowLeft size={16} /> Dashboard
-        </button>
+
 
         <h1 className="text-xl font-bold mb-6">Settings</h1>
 

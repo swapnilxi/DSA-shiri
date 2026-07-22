@@ -75,16 +75,7 @@ export default function PracticeListPage() {
       {/* Header */}
       <header className="sticky top-0 z-10 bg-gray-950/95 backdrop-blur border-b border-gray-800 px-6 py-3">
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="text-gray-500 hover:text-gray-300 transition-colors text-sm"
-            >
-              ← Dashboard
-            </button>
-            <div className="h-4 w-px bg-gray-800" />
-            <p className="text-sm font-semibold text-gray-200">Practice Questions</p>
-          </div>
+          <p className="text-sm font-semibold text-gray-200">Practice Questions</p>
           <p className="text-xs text-gray-600">
             {loading ? "Loading…" : `${visible.length} of ${filtered.length}${filtered.length < questions.length ? ` (filtered from ${questions.length})` : ""}`}
           </p>

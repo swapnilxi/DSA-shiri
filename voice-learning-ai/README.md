@@ -71,14 +71,76 @@ FastAPI Backend
 
 Local execution is the primary path. Cloud integrations are optional and exist to expand experimentation, provider comparisons, and fallback options, not to redefine the app as cloud-first.
 
-## Current Capabilities
+## Comprehensive Feature Matrix & Implementation Details
 
-- `Dashboard`: start interviews, choose topic, company, and model, review stats, and export practice material
-- `Interview Room`: spoken interviewer prompts, waveform UI, transcript stream, and scoring overlay
-- `Settings`: provider configuration, API key management, question-bank upload, and local model selection
-- `Practice`: tutor chat plus AI-generated hints, concepts, approaches, sample answers, quizzes, deep dives, and answer analysis
-- `Resume / Document Tools`: upload PDF, DOCX, TXT, or topic text and generate structured interview questions
-- `Database Viewer`: inspect and delete rows from core SQLite tables inside the app
+To help AI assistants and contributors understand the codebase, here is the exhaustive list of features built into this project and how they are implemented:
+
+### 🎙️ Core Interview Engine
+- **Real-time WebSocket sessions** with AI interviewer (Backend `interview.py`)
+- **Voice recording** via browser microphone using `MediaRecorder` API
+- **Speech-to-Text transcription** (Whisper, Moonshine, Groq, Deepgram via `services/stt.py`)
+- **Text-to-Speech spoken feedback** (Kokoro, macOS, Piper, Cartesia, Deepgram via `services/tts.py`)
+- **100-point rubric scoring** (Technical 40, Depth 25, Clarity 20, Process 15 via `services/assessor.py`)
+- **Real-time score overlay** with per-dimension progress bars (`ScoreOverlay.tsx`)
+- **Live audio waveform visualisation** for both interviewer and candidate (`Waveform.tsx`)
+- **Follow-up mode** for deeper probing, hints, explanations on the same question
+- **Follow-up report** with understanding score, strengths, and gaps
+- **End session confirmation** modal with "View Report" and "End Call" options
+- **Graceful WebSocket disconnect handling** via backend try-except blocks
+- **Session Timer:** Real-time elapsed interview session timer in `mm:ss` format (`InterviewRoom.tsx`)
+
+### 📊 Dashboard & Analytics
+- **Stats overview** (sessions, answers, avg score, topics)
+- **Topic mastery radar chart** using Recharts (`TopicRadar.tsx`)
+- **Recent sessions list** with score colour coding
+- **Quick session start** with topic, company, model, follow-up mode pickers
+- **Question bank board** (randomized, filterable by category)
+- **Daily Practice Set generation** with CSV/PDF export
+- **Category filter pills** (DSA, System Design, CV, Real-Life, Large Scale, Leadership)
+- **Tabbed Layout:** Division of dashboard statistics ("Overview") and the interactive question bank ("Practice Board")
+
+### 📝 Session Reports
+- **Per-question score breakdown** with 4-dimension bar charts
+- **LLM feedback** per answer
+- **Post-session AI analysis** (strengths, weak areas, learning plan, readiness badge)
+- **"Analyse More" deep dive** (what you got right, gaps, misconceptions, mini lesson, next steps, stronger answer outline)
+- **Session deletion** with confirmation
+
+### 📚 Practice Mode
+- **Question browser** with search, difficulty pills, category/topic dropdowns
+- **Infinite scroll** using `IntersectionObserver`
+- **Per-question practice page** with 7 AI-generated study sections:
+  - Hints, Key Concepts, Approach Guide, Sample Answer, Follow-up Questions, Dive Deeper, Quick Quiz (MCQs)
+- **AI Chat assistant** per question (with quick prompt buttons)
+- **Voice follow-up practice** (record answer → AI evaluates → multi-round)
+
+### 🤖 Question Generation
+- **Generate from uploaded resume/document** (PDF, DOCX, TXT via `routers/resume.py`)
+- **Resume library** (upload, select, delete)
+- **Generate from free-text topics** or combined resume + topic
+- **Daily practice set generator** with per-category count controls
+- **Preview generated questions** before saving to bank
+
+### 🗄️ Database Management (`voicelearning.db`)
+- **Full database browser** inside the app (`database/page.tsx`)
+- **Sortable columns** with resizable widths
+- **Batch delete** selected rows
+- **CRUD modal** for questions (add/edit single question)
+- **CSV bulk upload** and export per table
+
+### ⚙️ Settings & Configuration
+- **Global Navigation Bar** for moving between modules seamlessly (`NavBar.tsx`)
+- **LLM model picker** (Ollama local, DeepSeek API, Gemini API)
+- **STT/TTS engine switcher** and configuration
+- **API key management** for all cloud providers (add/remove/toggle visibility)
+- **CSV upload** for question bank seeding
+- **Breadcrumbs navigation** for trace tracking in sub-modules (`Breadcrumbs.tsx`)
+
+### 🏗️ Infrastructure & Architecture
+- **FastAPI backend** with modular routers (interview, questions, progress, resume, practice)
+- **SQLite persistence** (sessions, questions, responses, scores, topic_mastery)
+- **Next.js 15 frontend** with App Router
+- **Launch scripts** (`start.sh`) to run FE + BE in one terminal
 
 ---
 
@@ -599,13 +661,9 @@ database_path = "../data/voicelearning.db"
 
 ---
 
-## Roadmap
+## Roadmap & Implementation Tracker
 
-- [ ] Code execution sandbox (run your algorithm answer live)
-- [ ] Whiteboard mode (draw data structures while speaking)
-- [ ] Multi-round mock interview (HR + Tech + System Design sequence)
-- [ ] Export session transcript as PDF
-- [ ] Compare against real FAANG interview pass rates
+To track feature completion status, in-progress tasks, and missing features, please refer to the detailed [TODO.md](TODO.md) file.
 
 ---
 

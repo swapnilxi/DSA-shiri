@@ -9,6 +9,7 @@ import {
   ExternalLink, BrainCircuit, Trash2,
 } from "lucide-react";
 import { api, FollowupReport, Session, SessionResponse, SessionAnalysis } from "@/lib/api";
+import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 
 interface AnalyseMoreResult {
   what_you_got_right: string;
@@ -203,15 +204,19 @@ export default function SessionDetailPage() {
     : null;
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-6">
-      <div className="max-w-3xl mx-auto">
+    <>
+      <Breadcrumbs
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Sessions", href: "/sessions" },
+          { label: `Session #${sessionId}` },
+        ]}
+      />
+      <div className="min-h-screen bg-gray-950 text-white p-6">
+        <div className="max-w-3xl mx-auto">
 
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => router.back()}
-            className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white">
-            <ArrowLeft size={16} />
-          </button>
+          {/* Header */}
+          <div className="flex items-center gap-3 mb-6">
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold truncate">{session.title}</h1>
             <p className="text-xs text-gray-500">
@@ -687,6 +692,6 @@ export default function SessionDetailPage() {
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }

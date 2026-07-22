@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BarChart2, BookOpen, Mic, Upload, Zap, ChevronDown, ChevronRight, Database,
-  Sparkles, RefreshCw, X, Download, FileText, Trash2,
+  Sparkles, RefreshCw, X, Download, FileText, Trash2, LayoutDashboard, Target
 } from "lucide-react";
 import { api, Stats, TopicMastery, Session, Question } from "@/lib/api";
 import { TopicRadar } from "@/components/dashboard/TopicRadar";
@@ -137,6 +137,9 @@ export default function DashboardPage() {
   const [followUpMode, setFollowUpMode] = useState(false);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState("");
+
+  // ── active tab ──────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<"overview" | "practice">("overview");
 
   // ── question bank board ───────────────────────────────────────────────────────
   const [boardCats, setBoardCats] = useState<Set<string>>(new Set());
@@ -306,29 +309,9 @@ export default function DashboardPage() {
       <div className="max-w-6xl mx-auto">
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold">Voice Learning AI</h1>
-            <p className="text-gray-400 text-sm mt-0.5">Local voice assessment • FAANG level</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => router.push("/database")}
-              className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300">
-              <Database size={14} /> DB
-            </button>
-            <button onClick={() => router.push("/generate")}
-              className="flex items-center gap-1.5 px-3 py-2 bg-blue-900/60 hover:bg-blue-900 border border-blue-800 rounded-lg text-sm text-blue-300">
-              <Sparkles size={14} /> Generate
-            </button>
-            <button onClick={() => router.push("/practice")}
-              className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300">
-              <BookOpen size={14} /> Practice
-            </button>
-            <button onClick={() => router.push("/settings")}
-              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm">
-              Settings
-            </button>
-          </div>
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-gray-400 text-sm mt-0.5">Local voice assessment • FAANG level</p>
         </div>
 
         {/* Start session card */}
@@ -439,7 +422,8 @@ export default function DashboardPage() {
               )}
             </div>
 
-            <div className="self-end">
+            <div>
+              <label className="text-xs mb-1.5 block invisible">Start</label>
               <button
                 onClick={handleStart}
                 disabled={starting || !!deepSeekNotConfigured || !!geminiNotConfigured}
@@ -482,8 +466,31 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Stats row */}
-        {stats && (
+        {/* Tabs */}
+        <div className="flex items-center gap-2 mb-6 border-b border-gray-800 pb-2">
+          <button
+            onClick={() => setActiveTab("overview")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === "overview" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-gray-300 hover:bg-gray-800/50"
+            }`}
+          >
+            <LayoutDashboard size={16} /> Overview
+          </button>
+          <button
+            onClick={() => setActiveTab("practice")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === "practice" ? "bg-gray-800 text-white" : "text-gray-400 hover:text-gray-300 hover:bg-gray-800/50"
+            }`}
+          >
+            <Target size={16} /> Practice Board
+          </button>
+        </div>
+
+        {/* Overview Tab Content */}
+        {activeTab === "overview" && (
+          <>
+            {/* Stats row */}
+            {stats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             {[
               { label: "Sessions", value: stats.sessions_completed, icon: <BarChart2 size={18} /> },
@@ -528,10 +535,12 @@ export default function DashboardPage() {
             </div>
 
             {sessions.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-center">
-                <Mic size={28} className="text-gray-700 mb-2" />
-                <p className="text-sm text-gray-500">No sessions yet</p>
-                <p className="text-xs text-gray-600 mt-1">Start your first interview above!</p>
+              <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed border-gray-800 rounded-xl mt-2 bg-gray-900/50">
+                <div className="w-16 h-16 bg-gray-800/80 rounded-full flex items-center justify-center mb-4 border border-gray-700 shadow-inner">
+                  <Mic size={28} className="text-gray-500" />
+                </div>
+                <p className="text-sm font-medium text-gray-400">No sessions yet</p>
+                <p className="text-xs text-gray-500 mt-1">Your recent interviews will appear here.</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -599,9 +608,13 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+        )}
 
-        {/* ── Question Bank Board ────────────────────────────────────────────── */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+        {/* Practice Board Tab Content */}
+        {activeTab === "practice" && (
+        <>
+          {/* ── Question Bank Board ────────────────────────────────────────────── */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
               <Database size={14} className="text-blue-400" />
@@ -756,7 +769,9 @@ export default function DashboardPage() {
               {boardLoading ? "Loading…" : practiceMode ? "Generate next Practice Set" : "Load another 10 random"}
             </button>
           )}
-        </div>
+          </div>
+        </>
+        )}
 
       </div>
     </div>

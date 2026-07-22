@@ -142,12 +142,6 @@ export default function SessionsPage() {
       {/* Sticky header */}
       <div className="sticky top-0 z-20 bg-gray-950/95 backdrop-blur border-b border-gray-800/60">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center gap-4">
-          <button
-            onClick={() => router.back()}
-            className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors shrink-0"
-          >
-            <ArrowLeft size={16} />
-          </button>
           <div className="flex-1">
             <h1 className="text-lg font-bold leading-tight">All Sessions</h1>
             <p className="text-xs text-gray-500 mt-0.5">

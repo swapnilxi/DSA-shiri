@@ -301,10 +301,6 @@ export default function DatabasePage() {
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
       {/* ── Header ── */}
       <div className="flex items-center gap-4 px-6 py-4 bg-gray-900 border-b border-gray-800 flex-wrap">
-        <button onClick={() => router.push("/dashboard")}
-          className="flex items-center gap-2 text-gray-400 hover:text-white text-sm">
-          <ArrowLeft size={16} />
-        </button>
         <Database size={18} className="text-blue-400" />
         <h1 className="text-base font-semibold">Database</h1>
         <span className="text-xs text-gray-500 font-mono">voicelearning.db</span>

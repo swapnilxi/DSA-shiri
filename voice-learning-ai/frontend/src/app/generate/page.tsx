@@ -465,12 +465,6 @@ export default function GeneratePage() {
       <div className="max-w-3xl mx-auto">
 
         {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => router.push("/dashboard")}
-            className="flex items-center gap-1.5 text-gray-400 hover:text-white text-sm">
-            <ArrowLeft size={15} /> Dashboard
-          </button>
-        </div>
 
         <div className="mb-5">
           <h1 className="text-xl font-bold flex items-center gap-2">

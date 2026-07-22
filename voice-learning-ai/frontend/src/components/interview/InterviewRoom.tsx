@@ -30,9 +30,24 @@ export function InterviewRoom({ sessionId, topic, onEnd }: Props) {
   const [followUpRound, setFollowUpRound] = useState<number | null>(null);
   const [latestFollowUpReport, setLatestFollowUpReport] = useState<InterviewFollowupReport | null>(null);
   const [showEndModal, setShowEndModal] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
   const submittingRef = useRef(false);
   const processedEvents = useRef(0);
   const followUpModeRef = useRef(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatTime = (totalSeconds: number) => {
+    const m = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
+    const s = (totalSeconds % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  };
 
   useEffect(() => {
     interview.connect();
@@ -160,17 +175,22 @@ export function InterviewRoom({ sessionId, topic, onEnd }: Props) {
           <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
           <span className="text-sm font-medium text-gray-200">Voice Learning AI — {topic}</span>
         </div>
-        {currentQ && (
-          <span className="text-sm text-gray-400">
-            Question {currentQ.index + 1} / {currentQ.total}
+        <div className="flex items-center gap-4">
+          {currentQ && (
+            <span className="text-sm text-gray-400 border-r border-gray-800 pr-4">
+              Question {currentQ.index + 1} / {currentQ.total}
+            </span>
+          )}
+          <span className="text-sm font-mono text-gray-300 tracking-wider">
+            {formatTime(elapsedSeconds)}
           </span>
-        )}
-        <button
-          onClick={() => setShowEndModal(true)}
-          className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded-lg text-sm transition-colors"
-        >
-          <PhoneOff size={14} /> End
-        </button>
+          <button
+            onClick={() => setShowEndModal(true)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded-lg text-sm transition-colors"
+          >
+            <PhoneOff size={14} /> End
+          </button>
+        </div>
       </div>
 
       {/* Main split — video panels */}
