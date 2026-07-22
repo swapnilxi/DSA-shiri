@@ -303,6 +303,10 @@ export const api = {
     const qs = model ? `?model=${encodeURIComponent(model)}` : "";
     return request<SessionAnalysis>(`/progress/sessions/${id}/analyze${qs}`, { method: "POST" });
   },
+  faangFeedback: (id: number, model?: string) => {
+    const qs = model ? `?model=${encodeURIComponent(model)}` : "";
+    return request<FaangFeedback>(`/progress/sessions/${id}/faang-feedback${qs}`, { method: "POST" });
+  },
   getMastery: () => request<TopicMastery[]>("/progress/mastery"),
   getStats: () => request<Stats>("/progress/stats"),
 
@@ -491,6 +495,27 @@ export interface SessionAnalysis {
   }[];
   learning_plan: { priority: number; action: string }[];
   readiness: "Strong" | "Needs Work" | "Not Ready";
+}
+
+export interface FaangDimensionFeedback {
+  passed_bar: boolean;
+  assessment: string;
+  top_gap: string;
+  fix: string;
+}
+
+export interface FaangFeedback {
+  hiring_verdict: string;
+  overall_impression: string;
+  dimension_feedback: {
+    technical_correctness: FaangDimensionFeedback;
+    depth_completeness:    FaangDimensionFeedback;
+    communication_clarity: FaangDimensionFeedback;
+    problem_solving:       FaangDimensionFeedback;
+  };
+  interview_specific_gaps: string[];
+  two_week_action_plan: { day: string; action: string }[];
+  one_thing_to_do_today: string;
 }
 
 export interface Stats {

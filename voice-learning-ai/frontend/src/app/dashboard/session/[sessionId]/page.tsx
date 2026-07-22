@@ -8,7 +8,7 @@ import {
   CheckCircle2, XCircle, Lightbulb, BarChart2,
   ExternalLink, BrainCircuit, Trash2, Building2, Zap,
 } from "lucide-react";
-import { api, FollowupReport, Session, SessionResponse, SessionAnalysis } from "@/lib/api";
+import { api, FollowupReport, Session, SessionResponse, SessionAnalysis, FaangFeedback } from "@/lib/api";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 
 interface AnalyseMoreResult {
@@ -75,8 +75,12 @@ function getTier(score: number) {
   return TIERS.find((t) => score >= t.min) ?? TIERS[TIERS.length - 1];
 }
 
-function FaangPanel({ responses }: { responses: SessionResponse[] }) {
+function FaangPanel({ sessionId, responses }: { sessionId: number; responses: SessionResponse[] }) {
   const answered = responses.filter((r) => r.total != null);
+  const [aiFeedback, setAiFeedback] = useState<FaangFeedback | null>(null);
+  const [aiLoading,  setAiLoading]  = useState(false);
+  const [aiError,    setAiError]    = useState("");
+
   if (answered.length === 0) return null;
 
   const avg = (key: keyof typeof FAANG_THRESHOLDS) =>
@@ -94,6 +98,27 @@ function FaangPanel({ responses }: { responses: SessionResponse[] }) {
     .map(([key, cfg]) => ({ key, cfg, score: avg(key), gap: cfg.faang - avg(key) }))
     .filter((g) => g.gap > 0)
     .sort((a, b) => b.gap - a.gap);
+
+  async function fetchAiFeedback() {
+    setAiLoading(true);
+    setAiError("");
+    try {
+      const model = localStorage.getItem("selectedModel") || undefined;
+      const result = await api.faangFeedback(sessionId, model);
+      setAiFeedback(result);
+    } catch (e: unknown) {
+      setAiError(e instanceof Error ? e.message : "Failed to generate AI feedback.");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  const DIM_META: Record<keyof typeof FAANG_THRESHOLDS, { label: string; color: string }> = {
+    technical_correctness: { label: "Technical",  color: "text-blue-400" },
+    depth_completeness:    { label: "Depth",      color: "text-purple-400" },
+    communication_clarity: { label: "Clarity",    color: "text-green-400" },
+    problem_solving:       { label: "Process",    color: "text-orange-400" },
+  };
 
   return (
     <div className={`bg-gradient-to-br ${tier.bg} border ${tier.border} rounded-2xl p-5 mb-6`}>
@@ -172,39 +197,157 @@ function FaangPanel({ responses }: { responses: SessionResponse[] }) {
         <p className="text-[10px] text-gray-600 mt-0.5">White line = FAANG minimum threshold per dimension</p>
       </div>
 
-      {/* Action recommendations */}
-      {gaps.length > 0 ? (
-        <div className="bg-black/25 rounded-xl p-4">
-          <div className="flex items-center gap-1.5 mb-3">
-            <Zap size={13} className="text-amber-400" />
-            <p className="text-xs font-bold text-amber-300 uppercase tracking-wide">
-              What to improve to reach FAANG level
-            </p>
-          </div>
-          <div className="space-y-3">
+      {/* Quick static tips (always visible) */}
+      {gaps.length > 0 && !aiFeedback && (
+        <div className="bg-black/20 rounded-xl p-4 mb-4">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2.5">Quick gap summary</p>
+          <div className="space-y-2">
             {gaps.map(({ key, cfg, score }) => (
-              <div key={key} className="flex gap-2.5">
+              <div key={key} className="flex gap-2 text-xs text-gray-300">
                 <div className={`shrink-0 w-1.5 h-1.5 rounded-full ${cfg.color} mt-1.5`} />
-                <div>
-                  <p className="text-xs font-semibold text-gray-200">
-                    {cfg.label}{" "}
-                    <span className="text-amber-300">
-                      +{(cfg.faang - score).toFixed(1)} pts needed
-                    </span>
-                    {" "}({score.toFixed(1)} → {cfg.faang}/{cfg.max})
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{cfg.tip}</p>
-                </div>
+                <span>
+                  <span className="font-medium">{cfg.label}</span>
+                  {" — "}
+                  <span className="text-amber-300">+{(cfg.faang - score).toFixed(1)} pts to FAANG bar</span>
+                </span>
               </div>
             ))}
           </div>
         </div>
-      ) : (
-        <div className="flex items-center gap-2 bg-emerald-900/30 border border-emerald-800/40 rounded-xl px-4 py-3">
+      )}
+
+      {gaps.length === 0 && !aiFeedback && (
+        <div className="flex items-center gap-2 bg-emerald-900/30 border border-emerald-800/40 rounded-xl px-4 py-3 mb-4">
           <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
-          <p className="text-sm text-emerald-200">
-            All dimensions meet FAANG thresholds. Focus on consistency across sessions.
-          </p>
+          <p className="text-sm text-emerald-200">All dimensions meet FAANG thresholds.</p>
+        </div>
+      )}
+
+      {/* AI Feedback button */}
+      {!aiFeedback && (
+        <button
+          onClick={fetchAiFeedback}
+          disabled={aiLoading}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold bg-amber-600/80 hover:bg-amber-500/90 disabled:opacity-50 disabled:cursor-not-allowed border border-amber-500/50 text-white transition-colors"
+        >
+          {aiLoading ? (
+            <>
+              <span className="w-4 h-4 border-2 border-white/60 border-t-transparent rounded-full animate-spin" />
+              Generating AI FAANG feedback…
+            </>
+          ) : (
+            <>
+              <Zap size={15} />
+              Get AI FAANG Feedback
+            </>
+          )}
+        </button>
+      )}
+
+      {aiError && (
+        <p className="mt-3 text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-lg px-3 py-2">{aiError}</p>
+      )}
+
+      {/* ── AI Feedback Result ─────────────────────────────────────────────── */}
+      {aiFeedback && (
+        <div className="space-y-4 mt-1">
+
+          {/* Verdict banner */}
+          <div className="bg-black/30 border border-amber-700/40 rounded-xl px-4 py-3 flex items-start gap-2">
+            <Zap size={14} className="text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-bold text-amber-300 uppercase tracking-wide mb-0.5">Hiring Verdict</p>
+              <p className="text-sm text-white font-medium leading-snug">{aiFeedback.hiring_verdict}</p>
+            </div>
+          </div>
+
+          {/* Overall impression */}
+          <div className="bg-black/20 rounded-xl px-4 py-3">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Overall Impression</p>
+            <p className="text-sm text-gray-200 leading-relaxed">{aiFeedback.overall_impression}</p>
+          </div>
+
+          {/* Per-dimension AI feedback */}
+          {aiFeedback.dimension_feedback && (
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Dimension-by-Dimension</p>
+              {(Object.entries(aiFeedback.dimension_feedback) as [keyof typeof FAANG_THRESHOLDS, typeof aiFeedback.dimension_feedback[keyof typeof FAANG_THRESHOLDS]][]).map(([key, fb]) => {
+                const meta = DIM_META[key];
+                return (
+                  <div key={key} className="bg-black/20 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`text-xs font-bold ${meta.color} uppercase tracking-wide`}>{meta.label}</span>
+                      <span className={`ml-auto text-xs px-2 py-0.5 rounded-full font-semibold ${fb.passed_bar ? "bg-green-900/60 text-green-300" : "bg-red-900/60 text-red-300"}`}>
+                        {fb.passed_bar ? "✓ Passed bar" : "✗ Below bar"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-300 leading-relaxed mb-2">{fb.assessment}</p>
+                    <div className="bg-black/20 rounded-lg px-3 py-2 mb-1.5">
+                      <p className="text-xs text-red-300 font-semibold mb-0.5">Top gap</p>
+                      <p className="text-xs text-gray-300">{fb.top_gap}</p>
+                    </div>
+                    <div className="bg-black/20 rounded-lg px-3 py-2">
+                      <p className="text-xs text-amber-300 font-semibold mb-0.5">Fix</p>
+                      <p className="text-xs text-gray-200">{fb.fix}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Session-specific gaps */}
+          {aiFeedback.interview_specific_gaps?.length > 0 && (
+            <div className="bg-red-950/20 border border-red-800/30 rounded-xl p-4">
+              <p className="text-xs font-semibold text-red-400 uppercase tracking-wide mb-2.5 flex items-center gap-1.5">
+                <AlertTriangle size={12} /> Specific Gaps From This Session
+              </p>
+              <ul className="space-y-1.5">
+                {aiFeedback.interview_specific_gaps.map((gap, i) => (
+                  <li key={i} className="flex gap-2 text-xs text-red-200">
+                    <span className="text-red-600 shrink-0 mt-0.5">•</span>{gap}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* 2-week action plan */}
+          {aiFeedback.two_week_action_plan?.length > 0 && (
+            <div className="bg-indigo-950/30 border border-indigo-800/30 rounded-xl p-4">
+              <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                <TrendingUp size={12} /> Your 2-Week FAANG Action Plan
+              </p>
+              <div className="space-y-2">
+                {aiFeedback.two_week_action_plan.map((item, i) => (
+                  <div key={i} className="flex gap-3">
+                    <span className="shrink-0 text-xs font-bold text-indigo-400 w-20">{item.day}</span>
+                    <p className="text-xs text-indigo-100 leading-relaxed">{item.action}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Today's action */}
+          {aiFeedback.one_thing_to_do_today && (
+            <div className="bg-amber-900/30 border border-amber-700/40 rounded-xl px-4 py-3 flex items-start gap-2">
+              <Lightbulb size={14} className="text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-bold text-amber-300 mb-0.5">Do This Today</p>
+                <p className="text-sm text-amber-100 leading-relaxed">{aiFeedback.one_thing_to_do_today}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Regenerate */}
+          <button
+            onClick={fetchAiFeedback}
+            disabled={aiLoading}
+            className="text-xs text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-40"
+          >
+            {aiLoading ? "Regenerating…" : "↻ Regenerate AI feedback"}
+          </button>
         </div>
       )}
     </div>
@@ -432,7 +575,7 @@ export default function SessionDetailPage() {
         )}
 
         {/* ── FAANG Readiness Panel ──────────────────────────────────────────── */}
-        <FaangPanel responses={responses} />
+        <FaangPanel sessionId={sessionId} responses={responses} />
 
         {/* ── Deep Analysis Panel ──────────────────────────────────────────── */}
         <div className="bg-gradient-to-br from-indigo-900/30 to-purple-900/30 border border-indigo-800/50 rounded-2xl p-5 mb-6">

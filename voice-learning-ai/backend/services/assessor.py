@@ -157,6 +157,79 @@ Return ONLY valid JSON with this structure:
 }}"""
 
 
+# ── FAANG AI Feedback ──────────────────────────────────────────────────────
+
+FAANG_FEEDBACK_SYSTEM = """You are a Staff Engineer and hiring manager at a top FAANG company (Google / Meta / Amazon / Apple / Netflix).
+You have just watched a candidate's mock technical interview. Your job is to write a blunt, personalised, and actionable
+FAANG readiness report — as if you were giving private feedback to a friend you genuinely want to pass.
+
+FAANG rubric thresholds (out of the given max points):
+  - Technical Correctness  ≥ 34/40  (85 %)
+  - Depth & Completeness   ≥ 21/25  (84 %)
+  - Communication Clarity  ≥ 17/20  (85 %)
+  - Problem Solving        ≥ 12/15  (80 %)
+
+Address the candidate directly as "you". Never say "the candidate".
+Return ONLY valid JSON — no prose outside the JSON block."""
+
+FAANG_FEEDBACK_TEMPLATE = """Session topic: {topic}
+
+Dimension scores (your averages across all questions):
+  Technical Correctness : {avg_technical:.1f} / 40   (FAANG bar: 34)
+  Depth & Completeness  : {avg_depth:.1f}    / 25   (FAANG bar: 21)
+  Communication Clarity : {avg_clarity:.1f}  / 20   (FAANG bar: 17)
+  Problem Solving       : {avg_process:.1f}  / 15   (FAANG bar: 12)
+  Overall average       : {avg_total:.1f}    / 100
+
+Questions, your answers, and the rubric feedback you already received:
+{qa_block}
+
+Write a FAANG readiness report as a FAANG hiring manager would deliver it privately. Return ONLY this JSON shape:
+{{
+  "hiring_verdict": "<one sentence verdict: would you pass this round at FAANG right now and why>",
+  "overall_impression": "<3-4 sentences: overall quality, what stood out positively, and what disqualified you from a clear hire>",
+  "dimension_feedback": {{
+    "technical_correctness": {{
+      "passed_bar": <true|false>,
+      "assessment": "<2-3 sentences on your technical accuracy across the session>",
+      "top_gap": "<the single most critical technical gap exposed>",
+      "fix": "<one concrete, specific action to close this gap within 2 weeks>"
+    }},
+    "depth_completeness": {{
+      "passed_bar": <true|false>,
+      "assessment": "<2-3 sentences on depth of your answers>",
+      "top_gap": "<what key trade-offs, edge cases, or system considerations you consistently skipped>",
+      "fix": "<one concrete, specific action>"
+    }},
+    "communication_clarity": {{
+      "passed_bar": <true|false>,
+      "assessment": "<2-3 sentences on structure and clarity>",
+      "top_gap": "<the clearest communication anti-pattern you showed>",
+      "fix": "<one concrete, specific action>"
+    }},
+    "problem_solving": {{
+      "passed_bar": <true|false>,
+      "assessment": "<2-3 sentences on your approach and thinking process>",
+      "top_gap": "<what process step you consistently skipped or did poorly>",
+      "fix": "<one concrete, specific action>"
+    }}
+  }},
+  "interview_specific_gaps": [
+    "<a very specific gap from the actual Q&A — reference real things you said or didn't say>",
+    "<another specific gap>",
+    "<another specific gap>"
+  ],
+  "two_week_action_plan": [
+    {{ "day": "Days 1-3",  "action": "<focused study or practice task>" }},
+    {{ "day": "Days 4-7",  "action": "<focused study or practice task>" }},
+    {{ "day": "Days 8-11", "action": "<focused study or practice task>" }},
+    {{ "day": "Days 12-14","action": "<mock interview / consolidation task>" }}
+  ],
+  "one_thing_to_do_today": "<the single highest-leverage action you could take today to level up>"
+}}"""
+
+
+
 async def score_answer(
     question: str,
     transcript: str,
@@ -384,7 +457,98 @@ async def analyze_session(
     return json.loads(_extract_json(raw))
 
 
+async def faang_feedback(
+    topic: str,
+    responses: list[dict],
+    model: str | None = None,
+) -> dict:
+    """Generate a personalised FAANG-level readiness report using the LLM.
+
+    Takes the full session Q&A (same shape as analyze_session) and the rubric
+    dimension scores that are already stored, then asks the LLM to act as a
+    FAANG hiring manager writing private, blunt, actionable feedback.
+    """
+    scored = [r for r in responses if r.get("total") is not None]
+    if not scored:
+        return {"error": "No scored responses found for this session."}
+
+    def avg(key: str) -> float:
+        return sum(float(r.get(key) or 0) for r in scored) / len(scored)
+
+    avg_technical = avg("technical_correctness")
+    avg_depth     = avg("depth_completeness")
+    avg_clarity   = avg("communication_clarity")
+    avg_process   = avg("problem_solving")
+    avg_total     = avg("total")
+
+    qa_lines = []
+    for i, r in enumerate(responses):
+        score_str = f"{r.get('total', '?')}/100" if r.get("total") is not None else "not scored"
+        dim_str = (
+            f"Technical={r.get('technical_correctness','?')}/40  "
+            f"Depth={r.get('depth_completeness','?')}/25  "
+            f"Clarity={r.get('communication_clarity','?')}/20  "
+            f"Process={r.get('problem_solving','?')}/15"
+        )
+        qa_lines.append(
+            f"Q{i+1} [{r.get('topic', topic)} | {r.get('difficulty', '?')} | {score_str}]\n"
+            f"  Scores: {dim_str}\n"
+            f"  Question: {r.get('question', '')}\n"
+            f"  Your answer: {r.get('transcript') or '(no answer given)'}\n"
+            f"  Rubric feedback: {r.get('llm_feedback') or '(none)'}"
+        )
+
+    raw = await chat(
+        [
+            {"role": "system", "content": FAANG_FEEDBACK_SYSTEM},
+            {
+                "role": "user",
+                "content": FAANG_FEEDBACK_TEMPLATE.format(
+                    topic=topic,
+                    avg_technical=avg_technical,
+                    avg_depth=avg_depth,
+                    avg_clarity=avg_clarity,
+                    avg_process=avg_process,
+                    avg_total=avg_total,
+                    qa_block="\n\n".join(qa_lines),
+                ),
+            },
+        ],
+        model=model,
+    )
+
+    data = json.loads(_extract_json(raw))
+
+    # Personalise all text fields
+    def _p(v: str) -> str:
+        return _personalize_text(v) if isinstance(v, str) else v
+
+    def _pl(v) -> list:
+        return _personalize_list(v) if isinstance(v, list) else []
+
+    dim_fb = data.get("dimension_feedback", {})
+    for dim_key in ("technical_correctness", "depth_completeness", "communication_clarity", "problem_solving"):
+        if dim_key in dim_fb:
+            d = dim_fb[dim_key]
+            d["assessment"] = _p(d.get("assessment", ""))
+            d["top_gap"]    = _p(d.get("top_gap", ""))
+            d["fix"]        = _p(d.get("fix", ""))
+
+    return {
+        "hiring_verdict":         _p(data.get("hiring_verdict", "")),
+        "overall_impression":     _p(data.get("overall_impression", "")),
+        "dimension_feedback":     dim_fb,
+        "interview_specific_gaps": _pl(data.get("interview_specific_gaps")),
+        "two_week_action_plan":   [
+            {"day": item.get("day", ""), "action": _p(item.get("action", ""))}
+            for item in (data.get("two_week_action_plan") or [])
+        ],
+        "one_thing_to_do_today":  _p(data.get("one_thing_to_do_today", "")),
+    }
+
+
 def _history_block(turns: list[dict]) -> str:
+
     if not turns:
         return "(none yet)"
 

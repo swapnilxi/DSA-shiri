@@ -7,7 +7,7 @@ import os
 from fastapi import APIRouter, Body, HTTPException, Query
 
 from config import settings
-from services.assessor import analyze_session
+from services.assessor import analyze_session, faang_feedback
 
 router = APIRouter(prefix="/progress", tags=["progress"])
 
@@ -96,6 +96,50 @@ async def analyze_session_endpoint(
         raise HTTPException(400, "No responses found for this session")
 
     result = await analyze_session(
+        topic=session.get("topic", "General"),
+        responses=responses,
+        model=model or None,
+    )
+    return result
+
+
+@router.post("/sessions/{session_id}/faang-feedback")
+async def faang_feedback_endpoint(
+    session_id: int,
+    model: str = Query(default=None),
+):
+    """Generate a personalised FAANG hiring-manager readiness report using the LLM.
+
+    Reads the same session Q&A as /analyze, but produces a blunt dimension-by-dimension
+    gap analysis + a 2-week action plan tailored to the candidate's actual answers.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        async with db.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)) as cur:
+            session_row = await cur.fetchone()
+        if not session_row:
+            raise HTTPException(404, "Session not found")
+        session = dict(session_row)
+
+        async with db.execute(
+            """SELECT r.id, q.topic, q.question, q.difficulty,
+                      r.transcript,
+                      s.total, s.technical_correctness, s.depth_completeness,
+                      s.communication_clarity, s.problem_solving, s.llm_feedback
+               FROM responses r
+               JOIN questions q ON q.id = r.question_id
+               LEFT JOIN scores s ON s.response_id = r.id
+               WHERE r.session_id = ?
+               ORDER BY r.question_order""",
+            (session_id,),
+        ) as cur:
+            responses = [dict(r) for r in await cur.fetchall()]
+
+    if not responses:
+        raise HTTPException(400, "No responses found for this session")
+
+    result = await faang_feedback(
         topic=session.get("topic", "General"),
         responses=responses,
         model=model or None,
