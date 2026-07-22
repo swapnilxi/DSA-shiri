@@ -46,4 +46,4 @@ This tracker details the features implemented so far across the project phases a
 - [ ] **Code Execution Sandbox:** Run candidates' algorithm answers live in an execution sandbox.
 - [ ] **Whiteboard Mode:** Add a collaborative drawing board to illustrate data structures or architecture flows while speaking.
 - [ ] **Multi-Round Mock Interview Sequences:** Support structured sequential interview loops (e.g., HR round → System Design round → Coding round) with an aggregated readiness profile.
-- [ ] **FAANG Pass-Rate Comparison:** Contrast candidates' performance with actual target metrics from top tech companies to show pass/fail percentiles.
+- [x] **FAANG Pass-Rate Comparison:** Each session report now shows a FAANG Readiness panel — tier badge (Strong Hire / Hire / Borderline / Not Ready), score gauge with tier markers at 60/75/90, per-dimension bars vs FAANG minimums, and targeted upgrade tips for every dimension below the FAANG bar.

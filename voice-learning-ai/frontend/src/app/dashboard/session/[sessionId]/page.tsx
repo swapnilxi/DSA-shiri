@@ -6,7 +6,7 @@ import {
   Sparkles, ChevronDown, ChevronRight,
   BookOpen, Target, TrendingUp, AlertTriangle,
   CheckCircle2, XCircle, Lightbulb, BarChart2,
-  ExternalLink, BrainCircuit, Trash2,
+  ExternalLink, BrainCircuit, Trash2, Building2, Zap,
 } from "lucide-react";
 import { api, FollowupReport, Session, SessionResponse, SessionAnalysis } from "@/lib/api";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
@@ -55,6 +55,162 @@ const DIMENSIONS: { key: keyof SessionResponse; label: string; color: string; ma
   { key: "problem_solving",       label: "Process",    color: "bg-orange-500", max: 15 },
 ];
 
+// ── FAANG Readiness ────────────────────────────────────────────────────────
+
+const FAANG_THRESHOLDS = {
+  technical_correctness: { faang: 34, label: "Technical",  max: 40, color: "bg-blue-500",   tip: "Nail time/space complexity, edge cases, and correct algorithmic choices." },
+  depth_completeness:    { faang: 21, label: "Depth",      max: 25, color: "bg-purple-500", tip: "Discuss trade-offs, alternative approaches, and system constraints." },
+  communication_clarity: { faang: 17, label: "Clarity",    max: 20, color: "bg-green-500",  tip: "Structure your answer: clarify → plan → solve → optimise → reflect." },
+  problem_solving:       { faang: 12, label: "Process",    max: 15, color: "bg-orange-500", tip: "Think out loud, break the problem down, and validate your approach before coding." },
+} as const;
+
+const TIERS = [
+  { min: 90, label: "Strong Hire",  bg: "from-emerald-900/60 to-green-900/30",  border: "border-emerald-700", text: "text-emerald-300", badge: "bg-emerald-800 text-emerald-200", bar: "bg-emerald-500", companies: "Google L5+, Meta E5+, Apple ICT4+" },
+  { min: 75, label: "Hire",         bg: "from-blue-900/60 to-cyan-900/30",      border: "border-blue-700",    text: "text-blue-300",   badge: "bg-blue-800 text-blue-200",     bar: "bg-blue-500",    companies: "Google L4, Meta E4, Amazon SDE-II" },
+  { min: 60, label: "Borderline",   bg: "from-yellow-900/40 to-amber-900/20",   border: "border-yellow-700",  text: "text-yellow-300", badge: "bg-yellow-800 text-yellow-200",  bar: "bg-yellow-500",  companies: "Junior roles, mid-tier companies" },
+  { min: 0,  label: "Not Ready",    bg: "from-red-900/40 to-rose-900/20",       border: "border-red-700",     text: "text-red-300",    badge: "bg-red-800 text-red-200",       bar: "bg-red-500",     companies: "Needs more preparation" },
+];
+
+function getTier(score: number) {
+  return TIERS.find((t) => score >= t.min) ?? TIERS[TIERS.length - 1];
+}
+
+function FaangPanel({ responses }: { responses: SessionResponse[] }) {
+  const answered = responses.filter((r) => r.total != null);
+  if (answered.length === 0) return null;
+
+  const avg = (key: keyof typeof FAANG_THRESHOLDS) =>
+    answered.reduce((s, r) => s + ((r[key] as number) ?? 0), 0) / answered.length;
+
+  const avgScore = answered.reduce((s, r) => s + r.total, 0) / answered.length;
+  const tier = getTier(Math.round(avgScore));
+
+  const dims = Object.entries(FAANG_THRESHOLDS) as [
+    keyof typeof FAANG_THRESHOLDS,
+    (typeof FAANG_THRESHOLDS)[keyof typeof FAANG_THRESHOLDS]
+  ][];
+
+  const gaps = dims
+    .map(([key, cfg]) => ({ key, cfg, score: avg(key), gap: cfg.faang - avg(key) }))
+    .filter((g) => g.gap > 0)
+    .sort((a, b) => b.gap - a.gap);
+
+  return (
+    <div className={`bg-gradient-to-br ${tier.bg} border ${tier.border} rounded-2xl p-5 mb-6`}>
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-4">
+        <Building2 size={16} className={tier.text} />
+        <h2 className={`text-sm font-bold ${tier.text}`}>FAANG Readiness</h2>
+        <span className={`ml-auto px-3 py-1 rounded-full text-xs font-bold ${tier.badge}`}>
+          {tier.label}
+        </span>
+      </div>
+
+      {/* Score gauge */}
+      <div className="mb-4">
+        <div className="flex items-end justify-between mb-1.5">
+          <span className="text-xs text-gray-400">Your average</span>
+          <span className={`text-2xl font-bold ${tier.text}`}>
+            {Math.round(avgScore)}<span className="text-sm text-gray-500">/100</span>
+          </span>
+        </div>
+        <div className="relative h-3 bg-gray-800 rounded-full overflow-hidden mb-1">
+          <div
+            className={`h-full rounded-full transition-all duration-700 ${tier.bar}`}
+            style={{ width: `${Math.min(100, avgScore)}%` }}
+          />
+          {[60, 75, 90].map((t) => (
+            <div key={t} className="absolute top-0 h-full w-px bg-gray-500/60" style={{ left: `${t}%` }} />
+          ))}
+        </div>
+        <div className="flex text-[10px] text-gray-600 px-0.5">
+          <span className="flex-1">0</span>
+          <span style={{ marginLeft: "calc(60% - 24px)" }}>60 Borderline</span>
+          <span style={{ marginLeft: "calc(15% - 16px)" }}>75 Hire</span>
+          <span className="ml-auto">90 Strong</span>
+        </div>
+        <p className="text-xs text-gray-400 mt-1.5">
+          Matching roles: <span className="text-gray-300 font-medium">{tier.companies}</span>
+        </p>
+      </div>
+
+      {/* Per-dimension vs FAANG */}
+      <div className="mb-4 space-y-2.5">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+          Dimension breakdown vs FAANG bar
+        </p>
+        {dims.map(([key, cfg]) => {
+          const score  = avg(key);
+          const pctYou   = Math.min(100, (score      / cfg.max) * 100);
+          const pctFaang = Math.min(100, (cfg.faang  / cfg.max) * 100);
+          const passing  = score >= cfg.faang;
+          return (
+            <div key={key}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-gray-400">{cfg.label}</span>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className={passing ? "text-green-400 font-semibold" : "text-red-400"}>
+                    {score.toFixed(1)}/{cfg.max}
+                  </span>
+                  <span className="text-gray-600">min {cfg.faang}</span>
+                </div>
+              </div>
+              <div className="relative h-2 bg-gray-800 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ${cfg.color} opacity-90`}
+                  style={{ width: `${pctYou}%` }}
+                />
+                {/* FAANG threshold marker */}
+                <div
+                  className="absolute top-0 h-full w-0.5 bg-white/40"
+                  style={{ left: `${pctFaang}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+        <p className="text-[10px] text-gray-600 mt-0.5">White line = FAANG minimum threshold per dimension</p>
+      </div>
+
+      {/* Action recommendations */}
+      {gaps.length > 0 ? (
+        <div className="bg-black/25 rounded-xl p-4">
+          <div className="flex items-center gap-1.5 mb-3">
+            <Zap size={13} className="text-amber-400" />
+            <p className="text-xs font-bold text-amber-300 uppercase tracking-wide">
+              What to improve to reach FAANG level
+            </p>
+          </div>
+          <div className="space-y-3">
+            {gaps.map(({ key, cfg, score }) => (
+              <div key={key} className="flex gap-2.5">
+                <div className={`shrink-0 w-1.5 h-1.5 rounded-full ${cfg.color} mt-1.5`} />
+                <div>
+                  <p className="text-xs font-semibold text-gray-200">
+                    {cfg.label}{" "}
+                    <span className="text-amber-300">
+                      +{(cfg.faang - score).toFixed(1)} pts needed
+                    </span>
+                    {" "}({score.toFixed(1)} → {cfg.faang}/{cfg.max})
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{cfg.tip}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 bg-emerald-900/30 border border-emerald-800/40 rounded-xl px-4 py-3">
+          <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+          <p className="text-sm text-emerald-200">
+            All dimensions meet FAANG thresholds. Focus on consistency across sessions.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ScoreBar({ value, max, color }: { value: number; max: number; color: string }) {
   const pct = Math.min(100, Math.round((value / max) * 100));
   return (
@@ -66,6 +222,7 @@ function ScoreBar({ value, max, color }: { value: number; max: number; color: st
     </div>
   );
 }
+
 
 function scoreColor(total: number) {
   if (total >= 80) return "text-green-400";
@@ -273,6 +430,9 @@ export default function SessionDetailPage() {
             </div>
           </div>
         )}
+
+        {/* ── FAANG Readiness Panel ──────────────────────────────────────────── */}
+        <FaangPanel responses={responses} />
 
         {/* ── Deep Analysis Panel ──────────────────────────────────────────── */}
         <div className="bg-gradient-to-br from-indigo-900/30 to-purple-900/30 border border-indigo-800/50 rounded-2xl p-5 mb-6">
