@@ -8,6 +8,8 @@ import {
   Calendar, List, Pencil, Check,
 } from "lucide-react";
 import { api, GeneratedQuestion, ResumeEntry } from "@/lib/api";
+import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
+
 
 type ActiveTab = "library" | "topics" | "daily";
 type Difficulty = "Mixed" | "Easy" | "Medium" | "Hard";
@@ -461,8 +463,16 @@ export default function GeneratePage() {
 
   // ── render ────────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-6">
-      <div className="max-w-3xl mx-auto">
+    <>
+      <Breadcrumbs
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Generate Questions" },
+        ]}
+      />
+      <div className="min-h-screen bg-gray-950 text-white p-6">
+        <div className="max-w-3xl mx-auto">
+
 
         {/* Header */}
 
@@ -787,5 +797,7 @@ export default function GeneratePage() {
 
       </div>
     </div>
+    </>
   );
 }
+

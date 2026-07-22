@@ -3,6 +3,8 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, CheckCircle, AlertCircle, ArrowLeft, Eye, EyeOff, Key, Trash2, Cpu, Volume2, Mic, ChevronDown, Brain } from "lucide-react";
 import { api } from "@/lib/api";
+import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
+
 
 const DEEPSEEK_LABELS: Record<string, string> = {
   "deepseek-chat": "DeepSeek V3 (Chat)",
@@ -142,8 +144,7 @@ export default function SettingsPage() {
   const [cartesiaSaving, setCartesiaSaving] = useState(false);
 
   useEffect(() => {
-    api.health().then((data) => {
-      setHealth(data);
+    api.settings().then((data) => {
       setOllamaModel(data.ollama_model);
       setTtsEngine(data.tts_engine);
       if (data.cartesia_model === "sonic-english") setCartesiaModel("sonic-english");
@@ -155,6 +156,7 @@ export default function SettingsPage() {
       if (data.moonshine_model) setMoonshineModel(data.moonshine_model as "moonshine/tiny" | "moonshine/base");
       if (data.groq_stt_model) setGroqSttModel(data.groq_stt_model);
     }).catch(() => {});
+    api.health().then((h) => setHealth(h)).catch(() => {});
     api.getModels().then((mg) => {
       setModelGroups(mg);
       const saved = localStorage.getItem("selectedModel");
@@ -163,6 +165,7 @@ export default function SettingsPage() {
     }).catch(() => {});
     api.listTopics().then(setTopics).catch(() => {});
   }, []);
+
 
   async function handleSaveOllamaModel() {
     if (!ollamaModel) return;
@@ -504,11 +507,17 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-6">
-      <div className="max-w-2xl mx-auto">
+    <>
+      <Breadcrumbs
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Settings" },
+        ]}
+      />
+      <div className="min-h-screen bg-gray-950 text-white p-6">
+        <div className="max-w-2xl mx-auto">
+          <h1 className="text-xl font-bold mb-6">Settings</h1>
 
-
-        <h1 className="text-xl font-bold mb-6">Settings</h1>
 
         {/* System status */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5">
@@ -1270,9 +1279,10 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
+
 
 function Row({ label, value }: { label: string; value: string }) {
   return (

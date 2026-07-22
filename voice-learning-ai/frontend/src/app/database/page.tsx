@@ -6,6 +6,8 @@ import {
   Download, Trash2, Plus, Edit2, X, Save, Check, Upload, FileText, CheckCircle2,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
+
 
 type Row = Record<string, unknown>;
 
@@ -298,7 +300,15 @@ export default function DatabasePage() {
   const isQuestions = activeTable === "questions";
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+    <>
+      <Breadcrumbs
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Database" },
+        ]}
+      />
+      <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+
       {/* ── Header ── */}
       <div className="flex items-center gap-4 px-6 py-4 bg-gray-900 border-b border-gray-800 flex-wrap">
         <Database size={18} className="text-blue-400" />
@@ -786,5 +796,7 @@ export default function DatabasePage() {
         </div>
       )}
     </div>
+    </>
   );
 }
+

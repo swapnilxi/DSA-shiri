@@ -38,9 +38,10 @@ This tracker details the features implemented so far across the project phases a
 ## 🎯 What is Missing (Roadmap / Next Steps)
 
 ### 💡 High Priority
-- [ ] **Frontend integration of `/settings` API:** Standardize settings fetching on the Settings Page to completely utilize the `/settings` endpoint.
-- [ ] **Breadcrumbs Expansion:** Add breadcrumbs to the Database, Settings, and Generate routes for complete layout consistency.
-- [ ] **Export Session as PDF:** Add a download option in the session details report to save the full transcript and AI rubric score sheet.
+- [x] **Frontend integration of `/settings` API:** Settings page now fetches initial engine/model configuration directly via `/settings` endpoint.
+- [x] **Breadcrumbs Expansion:** Added contextual `<Breadcrumbs />` to Database, Settings, and Generate routes for complete layout consistency across all subpages.
+- [x] **Export Session as PDF:** Export PDF button added to session details report header allowing one-click download/print of session feedback and rubric scores.
+
 
 ### 🛠️ Advanced Simulation Features
 - [ ] **Code Execution Sandbox:** Run candidates' algorithm answers live in an execution sandbox.

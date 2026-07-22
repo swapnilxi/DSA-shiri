@@ -6,8 +6,9 @@ import {
   Sparkles, ChevronDown, ChevronRight,
   BookOpen, Target, TrendingUp, AlertTriangle,
   CheckCircle2, XCircle, Lightbulb, BarChart2,
-  ExternalLink, BrainCircuit, Trash2, Building2, Zap,
+  ExternalLink, BrainCircuit, Trash2, Building2, Zap, Download,
 } from "lucide-react";
+
 import { api, FollowupReport, Session, SessionResponse, SessionAnalysis, FaangFeedback } from "@/lib/api";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 
@@ -541,6 +542,13 @@ export default function SessionDetailPage() {
             </div>
           )}
           <button
+            onClick={() => window.print()}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700 text-xs font-medium transition-colors"
+            title="Export full session feedback & scores as PDF"
+          >
+            <Download size={14} /> Export PDF
+          </button>
+          <button
             onClick={async () => {
               if (!confirm("Delete this session and all its responses? This cannot be undone.")) return;
               await api.deleteSession(sessionId);
@@ -553,6 +561,7 @@ export default function SessionDetailPage() {
             <Trash2 size={15} />
           </button>
         </div>
+
 
         {/* Summary stats */}
         {answered.length > 0 && (

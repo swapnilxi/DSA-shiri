@@ -31,6 +31,9 @@ export const api = {
       deepgram_stt_model: string;
     }>("/health"),
 
+  settings: () => request<AppSettings>("/settings"),
+
+
   getModels: () =>
     request<{ ollama: string[]; deepseek: string[]; deepseek_configured: boolean; gemini: string[]; gemini_configured: boolean; default: string }>("/models"),
 
@@ -525,3 +528,23 @@ export interface Stats {
   top_topics: { topic: string; avg_score: number }[];
   weak_topics: { topic: string; avg_score: number }[];
 }
+
+export interface AppSettings {
+  ollama_model: string;
+  stt_engine: "whisper" | "moonshine" | "groq" | "deepgram";
+  tts_engine: "kokoro" | "apple" | "cartesia" | "piper" | "deepgram";
+  whisper_model: string;
+  moonshine_model: string;
+  tts_voice: string;
+  deepseek_configured: boolean;
+  gemini_configured: boolean;
+  cartesia_configured: boolean;
+  cartesia_model: string;
+  cartesia_voice_id: string;
+  deepgram_configured: boolean;
+  deepgram_model: string;
+  groq_configured: boolean;
+  groq_stt_model: string;
+  deepgram_stt_model: string;
+}
+
