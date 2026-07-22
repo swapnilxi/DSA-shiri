@@ -513,7 +513,27 @@ export default function SessionDetailPage() {
           { label: `Session #${sessionId}` },
         ]}
       />
+      <style jsx global>{`
+        @media print {
+          body {
+            background-color: white !important;
+            color: black !important;
+          }
+          button, .print\\:hidden {
+            display: none !important;
+          }
+          .bg-gray-950, .bg-gray-900, .bg-gray-800, .bg-black\\/30, .bg-black\\/20, .bg-black\\/25 {
+            background-color: white !important;
+            color: black !important;
+            border-color: #e5e7eb !important;
+          }
+          .text-white, .text-gray-100, .text-gray-200, .text-gray-300, .text-gray-400 {
+            color: #111827 !important;
+          }
+        }
+      `}</style>
       <div className="min-h-screen bg-gray-950 text-white p-6">
+
         <div className="max-w-3xl mx-auto">
 
           {/* Header */}
