@@ -1,3 +1,4 @@
+import asyncio
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +8,7 @@ from pydantic import BaseModel
 from db.database import init_db
 from routers import interview, questions, progress, resume, practice
 from services.llm import ollama_models, DEEPSEEK_MODELS, GEMINI_MODELS
+from services import tts as tts_mod
 from config import settings
 
 ENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
@@ -15,6 +17,10 @@ ENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    # Warm up TTS in the background (NOT awaited — blocking here would delay
+    # app startup, so no request or WebSocket handshake can be served while
+    # the model loads).
+    asyncio.create_task(asyncio.to_thread(tts_mod._preload_tts))
     yield
 
 
@@ -40,7 +46,9 @@ app.include_router(practice.router)
 
 @app.get("/health")
 async def health():
-    ol_models = ollama_models()
+    # ollama.list() is synchronous — run it off the event loop or a slow Ollama
+    # blocks every other request (including WebSocket handshakes).
+    ol_models = await asyncio.to_thread(ollama_models)
     return {
         "status": "ok",
         "ollama_model": settings.ollama_model,
@@ -68,7 +76,7 @@ async def health():
 @app.get("/models")
 async def get_models():
     """All available models grouped by provider."""
-    ol = ollama_models()
+    ol = await asyncio.to_thread(ollama_models)
     ds_configured = bool(settings.deepseek_api_key)
     gemini_configured = bool(settings.gemini_api_key)
     return {
@@ -127,7 +135,7 @@ async def save_tts_engine(body: TtsEngineBody):
 @app.post("/config/ollama-model")
 async def save_ollama_model(body: OllamaModelBody):
     """Set the default Ollama model after verifying it is installed locally."""
-    installed_models = ollama_models()
+    installed_models = await asyncio.to_thread(ollama_models)
     if body.model not in installed_models:
         from fastapi import HTTPException
         raise HTTPException(
@@ -175,6 +183,91 @@ async def remove_gemini_key():
     _upsert_env(ENV_PATH, "GEMINI_API_KEY", "")
     settings.gemini_api_key = ""
     return {"ok": True, "configured": False}
+
+
+class TestLLMKeyBody(BaseModel):
+    provider: str                      # "gemini" | "deepseek"
+    model: str                         # model id to test
+    api_key: str | None = None         # if omitted, test the currently-saved key
+
+
+@app.post("/config/test-llm")
+async def test_llm_key(body: TestLLMKeyBody):
+    """Live-test a cloud LLM key + model with a tiny chat request.
+
+    Verifies both that the API key works AND that the selected model is
+    currently available — so deprecated/renamed model ids surface immediately.
+    Returns ok + a human-readable message (with latency on success).
+    """
+    import time
+    import httpx
+
+    provider = body.provider.strip().lower()
+    model = (body.model or "").strip()
+
+    if provider == "gemini":
+        api_key = (body.api_key or settings.gemini_api_key or "").strip()
+        base_url = settings.gemini_base_url
+        key_label = "Gemini"
+    elif provider == "deepseek":
+        api_key = (body.api_key or settings.deepseek_api_key or "").strip()
+        base_url = settings.deepseek_base_url
+        key_label = "DeepSeek"
+    else:
+        from fastapi import HTTPException
+        raise HTTPException(400, "provider must be 'gemini' or 'deepseek'")
+
+    if not api_key:
+        return {"ok": False, "provider": provider, "model": model,
+                "message": f"No {key_label} API key to test — add or paste one first."}
+    if not model:
+        return {"ok": False, "provider": provider, "model": model,
+                "message": "Pick a model to test."}
+
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    payload = {"model": model, "messages": [{"role": "user", "content": "ping"}], "max_tokens": 8}
+
+    start = time.perf_counter()
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(f"{base_url}/chat/completions", headers=headers, json=payload)
+        latency_ms = int((time.perf_counter() - start) * 1000)
+    except Exception as exc:  # network / DNS / timeout
+        return {"ok": False, "provider": provider, "model": model,
+                "message": f"Could not reach {key_label}: {exc}"}
+
+    if resp.status_code == 200:
+        try:
+            data = resp.json()
+            served = data.get("model", model)
+        except Exception:
+            served = model
+        return {"ok": True, "provider": provider, "model": served, "latency_ms": latency_ms,
+                "message": f"✓ {key_label} key works — '{served}' replied in {latency_ms}ms."}
+
+    # Non-200: pull out the most useful error detail we can.
+    detail = ""
+    try:
+        err = resp.json()
+        detail = (err.get("error", {}) or {}).get("message") or err.get("message") or ""
+    except Exception:
+        detail = ""
+    detail = (detail or resp.text or "").strip()[:300]
+
+    detail_lower = detail.lower()
+    if resp.status_code in (401, 403) or (resp.status_code == 400 and "api key" in detail_lower):
+        hint = "The API key looks invalid or lacks access."
+    elif resp.status_code == 404:
+        hint = "This model isn't available for this key — try another model."
+    elif resp.status_code == 429:
+        hint = "Rate limit or quota exceeded — try again shortly."
+    else:
+        hint = ""
+    message = f"{key_label} returned HTTP {resp.status_code}. {detail}".strip()
+    if hint:
+        message += f" ({hint})"
+    return {"ok": False, "provider": provider, "model": model,
+            "status_code": resp.status_code, "message": message}
 
 
 class CartesiaKeyBody(BaseModel):

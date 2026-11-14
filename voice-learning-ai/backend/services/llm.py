@@ -3,8 +3,8 @@ Unified LLM client — routes to Ollama, DeepSeek, or Gemini based on model name
 
   deepseek-chat      → DeepSeek V3  (API)
   deepseek-reasoner  → DeepSeek R1  (API)
-  gemini-2.0-flash   → Gemini 2.0 Flash  (API, free tier)
-  gemini-1.5-flash   → Gemini 1.5 Flash  (API, free tier)
+  gemini-2.5-flash       → Gemini 2.5 Flash  (API, free tier)
+  gemini-flash-lite-latest → Gemini 2.5 Flash-Lite  (API, free tier, fastest)
   anything else      → Ollama (local)
 """
 import asyncio
@@ -14,7 +14,7 @@ import ollama as _ollama
 from config import settings
 
 DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner"}
-GEMINI_MODELS = {"gemini-2.0-flash", "gemini-1.5-flash"}
+GEMINI_MODELS = {"gemini-2.5-flash", "gemini-flash-lite-latest"}
 
 
 async def chat(messages: list[dict], model: str | None = None) -> str:

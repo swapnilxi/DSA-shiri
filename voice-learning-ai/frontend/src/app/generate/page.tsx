@@ -22,9 +22,9 @@ interface ModelGroups {
 }
 
 const DIFF_COLORS: Record<string, string> = {
-  Easy: "bg-green-900/50 text-green-300 border-green-800",
-  Medium: "bg-yellow-900/50 text-yellow-300 border-yellow-800",
-  Hard: "bg-red-900/50 text-red-300 border-red-800",
+  Easy: "bg-status-ok/10 text-status-ok border-status-ok/30",
+  Medium: "bg-status-warn/10 text-status-warn border-status-warn/30",
+  Hard: "bg-status-error/12 text-status-error border-status-error/30",
 };
 
 const DAILY_CATS = [
@@ -280,10 +280,10 @@ export default function GeneratePage() {
           if (isEditing) return;
           setDailyCats((p) => ({ ...p, [cat.id]: { ...(p[cat.id] ?? { enabled: false, count: 1 }), enabled: !(p[cat.id]?.enabled ?? false) } }));
         }}
-        className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${isEditing ? "bg-gray-800 border-gray-600 cursor-default" : `cursor-pointer ${state.enabled ? "bg-purple-900/20 border-purple-800" : "bg-gray-800 border-gray-700 hover:border-gray-600"}`}`}
+        className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${isEditing ? "bg-surface-2 border-border-strong cursor-default" : `cursor-pointer ${state.enabled ? "bg-gold/10 border-gold/20" : "bg-surface-2 border-border-default hover:border-border-strong"}`}`}
       >
         {/* Checkbox */}
-        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${state.enabled ? "bg-purple-600 border-purple-500" : "border-gray-600"}`}>
+        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${state.enabled ? "bg-accent border-accent/50" : "border-border-strong"}`}>
           {state.enabled && <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1 4l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
         </div>
 
@@ -295,21 +295,21 @@ export default function GeneratePage() {
             onChange={(e) => setEditingLabel(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") setEditingId(null); }}
             onClick={(e) => e.stopPropagation()}
-            className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-0.5 text-sm text-white focus:outline-none focus:border-purple-500"
+            className="flex-1 bg-surface-3 border border-border-strong rounded-lg px-2 py-0.5 text-sm text-white focus:outline-none focus:border-accent/50"
           />
         ) : (
-          <span className={`flex-1 leading-tight ${cat.label.length > 22 ? "text-xs" : "text-sm"} ${state.enabled ? "text-gray-200" : "text-gray-400"}`}>{cat.label}</span>
+          <span className={`flex-1 leading-tight ${cat.label.length > 22 ? "text-xs" : "text-sm"} ${state.enabled ? "text-text-primary" : "text-text-secondary"}`}>{cat.label}</span>
         )}
 
         {/* Count stepper (only when enabled) */}
         {state.enabled && !isEditing && (
           <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setDailyCats((p) => ({ ...p, [cat.id]: { ...p[cat.id], count: Math.max(1, p[cat.id].count - 1) } }))}
-              className="w-6 h-6 flex items-center justify-center rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm leading-none">−</button>
+              className="w-6 h-6 flex items-center justify-center rounded-lg bg-surface-3 hover:bg-surface-3 text-text-primary text-sm leading-none">−</button>
             <span className="w-7 text-center text-sm font-semibold text-white">{state.count}</span>
             <button onClick={() => setDailyCats((p) => ({ ...p, [cat.id]: { ...p[cat.id], count: Math.min(20, p[cat.id].count + 1) } }))}
-              className="w-6 h-6 flex items-center justify-center rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm leading-none">+</button>
-            <span className="text-xs text-gray-500 ml-1">q</span>
+              className="w-6 h-6 flex items-center justify-center rounded-lg bg-surface-3 hover:bg-surface-3 text-text-primary text-sm leading-none">+</button>
+            <span className="text-xs text-text-muted ml-1">q</span>
           </div>
         )}
 
@@ -318,17 +318,17 @@ export default function GeneratePage() {
           <div className="flex items-center gap-1 shrink-0 ml-1" onClick={(e) => e.stopPropagation()}>
             {isEditing ? (
               <button onClick={commitEdit}
-                className="w-6 h-6 flex items-center justify-center rounded-lg bg-purple-700 hover:bg-purple-600 text-white transition-colors">
+                className="w-6 h-6 flex items-center justify-center rounded-lg bg-accent hover:bg-accent-bright text-white transition-colors">
                 <Check size={12} />
               </button>
             ) : (
               <button onClick={() => { setEditingId(cat.id); setEditingLabel(cat.label); }}
-                className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-600 hover:text-gray-300 hover:bg-gray-700 transition-colors">
+                className="w-6 h-6 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-3 transition-colors">
                 <Pencil size={11} />
               </button>
             )}
             <button onClick={() => deleteCustomCat(cat.id)}
-              className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-900/20 transition-colors">
+              className="w-6 h-6 flex items-center justify-center rounded-lg text-text-muted hover:text-status-error hover:bg-status-error/12 transition-colors">
               <X size={12} />
             </button>
           </div>
@@ -342,7 +342,7 @@ export default function GeneratePage() {
       <div className="relative">
         <select value={model}
           onChange={(e) => { setModel(e.target.value); localStorage.setItem("selectedModel", e.target.value); }}
-          className="w-full appearance-none bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 pr-8 text-sm">
+          className="w-full appearance-none bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 pr-8 text-sm">
           {modelGroups?.ollama.length
             ? <optgroup label="Ollama — local">{modelGroups.ollama.map((m) => <option key={m} value={m}>{m}</option>)}</optgroup>
             : <option value="" disabled>No local models</option>}
@@ -352,7 +352,7 @@ export default function GeneratePage() {
             ))}
           </optgroup>
         </select>
-        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none" />
       </div>
     );
   }
@@ -362,24 +362,24 @@ export default function GeneratePage() {
     nq?: number; setNq?: (n: number) => void; showCount?: boolean;
   }) {
     return (
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-4">
+      <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-4">
         <div className="flex flex-wrap gap-4">
           {showCount && nq !== undefined && setNq && (
             <div className="flex-1 min-w-32">
-              <label className="text-xs text-gray-400 mb-1.5 block">Questions</label>
+              <label className="text-xs text-text-secondary mb-1.5 block">Questions</label>
               <input type="number" min={1} max={30} value={nq} onChange={(e) => setNq(Number(e.target.value))}
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600" />
+                className="w-full bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-accent/40" />
             </div>
           )}
           <div className="flex-1 min-w-32">
-            <label className="text-xs text-gray-400 mb-1.5 block">Difficulty</label>
+            <label className="text-xs text-text-secondary mb-1.5 block">Difficulty</label>
             <select value={diff} onChange={(e) => setDiff(e.target.value as Difficulty)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm">
+              className="w-full bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm">
               {["Mixed","Easy","Medium","Hard"].map((d) => <option key={d} value={d}>{d}</option>)}
             </select>
           </div>
           <div className="flex-1 min-w-44">
-            <label className="text-xs text-gray-400 mb-1.5 block">AI Model</label>
+            <label className="text-xs text-text-secondary mb-1.5 block">AI Model</label>
             <ModelSelect />
           </div>
         </div>
@@ -396,19 +396,19 @@ export default function GeneratePage() {
     ss: { inserted: number; skipped: number } | null;
   }) {
     return (
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-4">
+      <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-4">
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <span className="text-sm font-semibold text-gray-200 flex items-center gap-2">
-            <CheckCircle size={15} className="text-green-400" />
+          <span className="text-sm font-semibold text-text-primary flex items-center gap-2">
+            <CheckCircle size={15} className="text-status-ok" />
             {questions.length} questions · {source}
           </span>
           <div className="flex items-center gap-2">
             <button onClick={onExport}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-sm text-gray-300">
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-2 hover:bg-surface-3 border border-border-default rounded-lg text-sm text-text-primary">
               <Download size={13} /> Export CSV
             </button>
             {saved ? (
-              <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-900/40 border border-green-800 rounded-lg text-sm text-green-300">
+              <span className="flex items-center gap-1.5 px-3 py-1.5 bg-status-ok/10 border border-status-ok/30 rounded-lg text-sm text-status-ok">
                 <CheckCircle size={13} />
                 Saved ({ss!.inserted} new{ss!.skipped > 0 ? `, ${ss!.skipped} dupes` : ""})
               </span>
@@ -422,31 +422,31 @@ export default function GeneratePage() {
         </div>
         <div className="space-y-3">
           {questions.map((q, i) => (
-            <div key={i} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+            <div key={i} className="bg-surface-2 rounded-xl p-4 border border-border-default">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2 mb-2 flex-wrap flex-1">
-                  <span className="text-xs font-medium text-blue-300 bg-blue-900/40 border border-blue-800 rounded px-2 py-0.5">{q.topic}</span>
+                  <span className="text-xs font-medium text-accent bg-accent/40 border border-accent/25 rounded px-2 py-0.5">{q.topic}</span>
                   <span className={`text-xs font-medium border rounded px-2 py-0.5 ${DIFF_COLORS[q.difficulty]}`}>{q.difficulty}</span>
                   {q.company && (
-                    <span className="text-xs text-purple-300 bg-purple-900/30 border border-purple-800 rounded px-2 py-0.5">
+                    <span className="text-xs text-gold bg-gold/10 border border-gold/20 rounded px-2 py-0.5">
                       {q.company}
                     </span>
                   )}
-                  {q.category && <span className="text-xs text-gray-500">{q.category}</span>}
+                  {q.category && <span className="text-xs text-text-muted">{q.category}</span>}
                 </div>
-                <button onClick={() => onRemove(i)} className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-900/20 shrink-0 transition-colors">
+                <button onClick={() => onRemove(i)} className="p-1.5 rounded-lg text-text-muted hover:text-status-error hover:bg-status-error/12 shrink-0 transition-colors">
                   <Trash2 size={14} />
                 </button>
               </div>
-              <p className="text-sm text-gray-200 leading-relaxed">{q.question}</p>
-              {q.expected_keywords && <p className="text-xs text-gray-500 mt-2">Keywords: {q.expected_keywords}</p>}
+              <p className="text-sm text-text-primary leading-relaxed">{q.question}</p>
+              {q.expected_keywords && <p className="text-xs text-text-muted mt-2">Keywords: {q.expected_keywords}</p>}
             </div>
           ))}
         </div>
         {questions.length > 4 && (
           <div className="flex gap-2 mt-4">
             <button onClick={onExport}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl text-sm text-gray-300">
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-surface-2 hover:bg-surface-3 border border-border-default rounded-xl text-sm text-text-primary">
               <Download size={14} /> Export CSV
             </button>
             {!saved && (
@@ -470,7 +470,7 @@ export default function GeneratePage() {
           { label: "Generate Questions" },
         ]}
       />
-      <div className="min-h-screen bg-gray-950 text-white p-6">
+      <div className="min-h-screen bg-surface-0 text-white p-6">
         <div className="max-w-3xl mx-auto">
 
 
@@ -478,33 +478,33 @@ export default function GeneratePage() {
 
         <div className="mb-5">
           <h1 className="text-xl font-bold flex items-center gap-2">
-            <Sparkles size={20} className="text-blue-400" />
+            <Sparkles size={20} className="text-accent" />
             Generate Interview Questions
           </h1>
-          <p className="text-gray-400 text-sm mt-1">
+          <p className="text-text-secondary text-sm mt-1">
             Generate from files, enter topics, or build a structured daily practice set.
           </p>
         </div>
 
         {/* ── Library — shared across all tabs ──────────────────────────────── */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-4">
+        <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-4">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-              <BookOpen size={14} className="text-blue-400" />
+            <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2">
+              <BookOpen size={14} className="text-accent" />
               Library
               {library.length > 0 && (
-                <span className="px-1.5 py-0.5 bg-gray-800 rounded text-xs text-gray-400">{library.length} files</span>
+                <span className="px-1.5 py-0.5 bg-surface-2 rounded text-xs text-text-secondary">{library.length} files</span>
               )}
             </h2>
             <div className="flex items-center gap-2">
               {selectedIds.size > 0 && (
                 <button onClick={() => setSelectedIds(new Set())}
-                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors">
+                  className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary transition-colors">
                   <X size={11} /> Clear selection
                 </button>
               )}
               <button onClick={() => addFileRef.current?.click()} disabled={addingFile}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-40 border border-gray-700 rounded-lg text-xs text-gray-300 transition-colors">
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-2 hover:bg-surface-3 disabled:opacity-40 border border-border-default rounded-lg text-xs text-text-primary transition-colors">
                 {addingFile ? <span className="animate-pulse">Adding…</span> : <><Plus size={12} /> Add file</>}
               </button>
               <input ref={addFileRef} type="file" accept=".pdf,.docx,.doc,.txt,.md" className="hidden" onChange={handleAddFile} />
@@ -513,10 +513,10 @@ export default function GeneratePage() {
 
           {library.length === 0 ? (
             <div onClick={() => addFileRef.current?.click()}
-              className="border-2 border-dashed border-gray-700 hover:border-blue-600 rounded-xl p-6 flex flex-col items-center gap-2 text-gray-500 hover:text-gray-300 cursor-pointer transition-colors">
+              className="border-2 border-dashed border-border-default hover:border-accent/40 rounded-xl p-6 flex flex-col items-center gap-2 text-text-muted hover:text-text-primary cursor-pointer transition-colors">
               <Upload size={20} />
               <span className="text-sm">Click to add your first resume or file</span>
-              <span className="text-xs text-gray-600">PDF, DOCX, TXT, MD supported</span>
+              <span className="text-xs text-text-muted">PDF, DOCX, TXT, MD supported</span>
             </div>
           ) : (
             <>
@@ -525,20 +525,20 @@ export default function GeneratePage() {
                   const sel = selectedIds.has(r.id);
                   return (
                     <div key={r.id} onClick={() => toggleSelect(r.id)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer border transition-colors ${sel ? "bg-blue-900/30 border-blue-700" : "bg-gray-800 border-gray-700 hover:border-gray-600"}`}>
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${sel ? "bg-blue-600 border-blue-500" : "border-gray-600"}`}>
+                      className={`flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer border transition-colors ${sel ? "bg-accent/30 border-accent/35" : "bg-surface-2 border-border-default hover:border-border-strong"}`}>
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${sel ? "bg-accent border-accent/50" : "border-border-strong"}`}>
                         {sel && <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1 4l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                       </div>
-                      <FileText size={13} className={`shrink-0 ${sel ? "text-blue-400" : "text-gray-500"}`} />
+                      <FileText size={13} className={`shrink-0 ${sel ? "text-accent" : "text-text-muted"}`} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-200 truncate">{r.filename}</p>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-sm text-text-primary truncate">{r.filename}</p>
+                        <p className="text-xs text-text-muted">
                           {new Date(r.uploaded_at).toLocaleDateString()}
-                          {r.questions_generated > 0 && <span className="text-blue-400 ml-2">{r.questions_generated}q generated</span>}
+                          {r.questions_generated > 0 && <span className="text-accent ml-2">{r.questions_generated}q generated</span>}
                         </p>
                       </div>
                       <button onClick={(e) => { e.stopPropagation(); handleDelete(r.id); }} disabled={deletingId === r.id}
-                        className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-900/20 disabled:opacity-40 shrink-0 transition-colors">
+                        className="p-1.5 rounded-lg text-text-muted hover:text-status-error hover:bg-status-error/12 disabled:opacity-40 shrink-0 transition-colors">
                         <Trash2 size={13} />
                       </button>
                     </div>
@@ -546,14 +546,14 @@ export default function GeneratePage() {
                 })}
               </div>
               <button onClick={() => addFileRef.current?.click()} disabled={addingFile}
-                className="w-full flex items-center justify-center gap-2 py-1.5 border border-dashed border-gray-700 hover:border-blue-600 hover:text-blue-400 rounded-xl text-xs text-gray-500 disabled:opacity-40 transition-colors">
+                className="w-full flex items-center justify-center gap-2 py-1.5 border border-dashed border-border-default hover:border-accent/40 hover:text-accent rounded-xl text-xs text-text-muted disabled:opacity-40 transition-colors">
                 <Plus size={12} />{addingFile ? "Adding file…" : "Add another file"}
               </button>
             </>
           )}
 
           {selectedIds.size > 0 && (
-            <p className="text-xs text-blue-400 mt-2.5">
+            <p className="text-xs text-accent mt-2.5">
               {selectedIds.size} file{selectedIds.size !== 1 ? "s" : ""} selected — {TAB_FILE_NOTE[tab]}
             </p>
           )}
@@ -567,8 +567,8 @@ export default function GeneratePage() {
             { id: "topics",  label: "Enter Topics",   icon: <List size={14} />,      color: "blue"   },
           ] as const).map(({ id, label, icon, color }) => {
             const active = tab === id;
-            const on  = color === "purple" ? "bg-purple-700 border-purple-600 text-white" : "bg-blue-700 border-blue-600 text-white";
-            const off = "bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-600";
+            const on  = color === "purple" ? "bg-accent border-accent/40 text-white" : "bg-accent border-accent/40 text-white";
+            const off = "bg-surface-1 border-border-default text-text-secondary hover:text-white hover:border-border-strong";
             return (
               <button key={id} onClick={() => setTab(id)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors ${active ? on : off}`}>
@@ -584,15 +584,15 @@ export default function GeneratePage() {
         {tab === "library" && (
           <>
             {selectedIds.size === 0 ? (
-              <div className="bg-gray-900 border border-dashed border-gray-700 rounded-2xl p-5 mb-4 text-center text-gray-500 text-sm">
+              <div className="bg-surface-1 border border-dashed border-border-default rounded-2xl p-5 mb-4 text-center text-text-muted text-sm">
                 Select one or more files from the library above, then generate.
               </div>
             ) : (
-              <div className="bg-blue-950/30 border border-blue-900/50 rounded-2xl px-4 py-3 mb-4 flex items-center gap-2 flex-wrap">
-                <FileText size={13} className="text-blue-400 shrink-0" />
-                <span className="text-xs text-blue-300 font-medium">Generating from:</span>
+              <div className="bg-accent/30 border border-accent/25 rounded-2xl px-4 py-3 mb-4 flex items-center gap-2 flex-wrap">
+                <FileText size={13} className="text-accent shrink-0" />
+                <span className="text-xs text-accent font-medium">Generating from:</span>
                 {library.filter((r) => selectedIds.has(r.id)).map((r) => (
-                  <span key={r.id} className="text-xs text-gray-300 bg-gray-800 border border-gray-700 rounded px-2 py-0.5">{r.filename}</span>
+                  <span key={r.id} className="text-xs text-text-primary bg-surface-2 border border-border-default rounded px-2 py-0.5">{r.filename}</span>
                 ))}
               </div>
             )}
@@ -600,20 +600,20 @@ export default function GeneratePage() {
             <Controls diff={difficulty} setDiff={setDifficulty} nq={numQuestions} setNq={setNumQuestions} />
 
             <button onClick={handleGenerate} disabled={generating || selectedIds.size === 0}
-              className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl font-medium text-sm mb-4 transition-colors">
+              className="w-full flex items-center justify-center gap-2 py-3 bg-accent hover:bg-accent-bright disabled:opacity-40 disabled:cursor-not-allowed rounded-xl font-medium text-sm mb-4 transition-colors">
               <Sparkles size={16} />
               {generating ? "Generating…" : result ? "Generate New Set" : selectedIds.size === 0 ? "Select files above" : `Generate from ${selectedIds.size} file${selectedIds.size !== 1 ? "s" : ""}`}
             </button>
 
             {error && (
-              <div className="flex items-start gap-2 p-4 bg-red-900/30 border border-red-800 rounded-xl text-sm text-red-300 mb-4">
+              <div className="flex items-start gap-2 p-4 bg-status-error/12 border border-status-error/30 rounded-xl text-sm text-status-error mb-4">
                 <AlertCircle size={15} className="mt-0.5 shrink-0" />{error}
               </div>
             )}
 
             {result && (
               <Results
-                questions={result.questions} source={result.source} accent="bg-blue-700 hover:bg-blue-600 border border-blue-600"
+                questions={result.questions} source={result.source} accent="bg-accent hover:bg-accent-bright border border-accent/40"
                 onRemove={(i) => { setResult((p) => p ? { ...p, questions: p.questions.filter((_, j) => j !== i) } : p); setSaveStatus(null); }}
                 onExport={() => exportCSV(result.questions, "generated_questions.csv")}
                 onSave={handleSave} saved={saveStatus !== null} isSaving={saving} ss={saveStatus}
@@ -627,15 +627,15 @@ export default function GeneratePage() {
         ══════════════════════════════════════════════════════════════════════ */}
         {tab === "topics" && (
           <>
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-4">
-              <label className="text-xs text-gray-400 mb-2 block">Topics, skills, or any context (one per line or comma-separated)</label>
+            <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-4">
+              <label className="text-xs text-text-secondary mb-2 block">Topics, skills, or any context (one per line or comma-separated)</label>
               <textarea value={topics}
                 onChange={(e) => { setTopics(e.target.value); setResult(null); setSaveStatus(null); setError(""); }}
                 placeholder={`e.g.\nSystem Design — distributed systems, caching\nAlgorithms — dynamic programming, graphs\nBehavioral — leadership, conflict resolution`}
                 rows={6}
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm placeholder-gray-600 focus:outline-none focus:border-blue-600 resize-none" />
+                className="w-full bg-surface-2 border border-border-default rounded-xl px-4 py-3 text-sm placeholder:text-text-muted focus:outline-none focus:border-accent/40 resize-none" />
               {selectedIds.size > 0 && (
-                <p className="mt-2 text-xs text-blue-400 flex items-center gap-1.5">
+                <p className="mt-2 text-xs text-accent flex items-center gap-1.5">
                   <FileText size={11} />
                   {selectedIds.size} library file{selectedIds.size !== 1 ? "s" : ""} will be combined with these topics
                 </p>
@@ -645,20 +645,20 @@ export default function GeneratePage() {
             <Controls diff={difficulty} setDiff={setDifficulty} nq={numQuestions} setNq={setNumQuestions} />
 
             <button onClick={handleGenerate} disabled={generating || !topics.trim()}
-              className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl font-medium text-sm mb-4 transition-colors">
+              className="w-full flex items-center justify-center gap-2 py-3 bg-accent hover:bg-accent-bright disabled:opacity-40 disabled:cursor-not-allowed rounded-xl font-medium text-sm mb-4 transition-colors">
               <Sparkles size={16} />
               {generating ? "Generating…" : result ? "Generate New Set" : "Generate Questions"}
             </button>
 
             {error && (
-              <div className="flex items-start gap-2 p-4 bg-red-900/30 border border-red-800 rounded-xl text-sm text-red-300 mb-4">
+              <div className="flex items-start gap-2 p-4 bg-status-error/12 border border-status-error/30 rounded-xl text-sm text-status-error mb-4">
                 <AlertCircle size={15} className="mt-0.5 shrink-0" />{error}
               </div>
             )}
 
             {result && (
               <Results
-                questions={result.questions} source={result.source} accent="bg-blue-700 hover:bg-blue-600 border border-blue-600"
+                questions={result.questions} source={result.source} accent="bg-accent hover:bg-accent-bright border border-accent/40"
                 onRemove={(i) => { setResult((p) => p ? { ...p, questions: p.questions.filter((_, j) => j !== i) } : p); setSaveStatus(null); }}
                 onExport={() => exportCSV(result.questions, "generated_questions.csv")}
                 onSave={handleSave} saved={saveStatus !== null} isSaving={saving} ss={saveStatus}
@@ -673,9 +673,9 @@ export default function GeneratePage() {
         {tab === "daily" && (
           <>
             {/* Category selector */}
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-4">
-              <h2 className="text-sm font-semibold text-gray-300 mb-1">Select categories</h2>
-              <p className="text-xs text-gray-500 mb-4">Pick topics to practice and set the question count per category.</p>
+            <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-4">
+              <h2 className="text-sm font-semibold text-text-primary mb-1">Select categories</h2>
+              <p className="text-xs text-text-muted mb-4">Pick topics to practice and set the question count per category.</p>
 
               <div className="grid grid-cols-2 gap-2">
                 {/* Fixed categories */}
@@ -696,19 +696,19 @@ export default function GeneratePage() {
               </div>
 
               {/* Add new category */}
-              <div className="mt-3 pt-3 border-t border-gray-800">
+              <div className="mt-3 pt-3 border-t border-border-subtle">
                 <div className="flex gap-2">
                   <input
                     value={newCatLabel}
                     onChange={(e) => setNewCatLabel(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomCat(); } }}
                     placeholder="Add a custom category…"
-                    className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm placeholder-gray-600 focus:outline-none focus:border-purple-600"
+                    className="flex-1 bg-surface-2 border border-border-default rounded-xl px-3 py-2 text-sm placeholder:text-text-muted focus:outline-none focus:border-accent/60"
                   />
                   <button
                     onClick={addCustomCat}
                     disabled={!newCatLabel.trim()}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-purple-700 hover:bg-purple-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-sm text-white transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-accent hover:bg-accent-bright disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-sm text-white transition-colors"
                   >
                     <Plus size={14} /> Add
                   </button>
@@ -716,16 +716,16 @@ export default function GeneratePage() {
               </div>
 
               {enabledCats.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-gray-800 flex items-center justify-between">
-                  <span className="text-xs text-gray-500">{enabledCats.length} categor{enabledCats.length !== 1 ? "ies" : "y"}</span>
-                  <span className="text-sm font-semibold text-purple-300">{dailyTotal} total questions</span>
+                <div className="mt-3 pt-3 border-t border-border-subtle flex items-center justify-between">
+                  <span className="text-xs text-text-muted">{enabledCats.length} categor{enabledCats.length !== 1 ? "ies" : "y"}</span>
+                  <span className="text-sm font-semibold text-gold">{dailyTotal} total questions</span>
                 </div>
               )}
             </div>
 
             {/* Company target */}
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-4">
-              <label className="text-xs text-gray-400 mb-2 block font-medium">
+            <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-4">
+              <label className="text-xs text-text-secondary mb-2 block font-medium">
                 Target company
               </label>
               <select
@@ -735,7 +735,7 @@ export default function GeneratePage() {
                   setDailyResult(null);
                   setDailySaveStatus(null);
                 }}
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-purple-600"
+                className="w-full bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-accent/60"
               >
                 <option value="all">Auto / mixed companies</option>
                 {companies.map((company) => (
@@ -744,23 +744,23 @@ export default function GeneratePage() {
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-gray-500 mt-2">
+              <p className="text-xs text-text-muted mt-2">
                 A selected company is applied to every generated question.
               </p>
             </div>
 
             {/* Context */}
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-4">
-              <label className="text-xs text-gray-400 mb-2 block font-medium">
-                Additional context <span className="text-gray-600 font-normal">(optional)</span>
+            <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-4">
+              <label className="text-xs text-text-secondary mb-2 block font-medium">
+                Additional context <span className="text-text-muted font-normal">(optional)</span>
               </label>
               <textarea value={dailyContext}
                 onChange={(e) => { setDailyContext(e.target.value); setDailyResult(null); setDailySaveStatus(null); }}
                 placeholder="e.g., focus on autonomous vehicles, fintech regulations, or my upcoming Google interview…"
                 rows={3}
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm placeholder-gray-600 focus:outline-none focus:border-purple-600 resize-none" />
+                className="w-full bg-surface-2 border border-border-default rounded-xl px-4 py-3 text-sm placeholder:text-text-muted focus:outline-none focus:border-accent/60 resize-none" />
               {selectedIds.size > 0 && (
-                <p className="mt-2 text-xs text-purple-400 flex items-center gap-1.5">
+                <p className="mt-2 text-xs text-gold flex items-center gap-1.5">
                   <FileText size={11} />
                   {selectedIds.size} library file{selectedIds.size !== 1 ? "s" : ""} will be used as context
                 </p>
@@ -770,7 +770,7 @@ export default function GeneratePage() {
             <Controls diff={dailyDifficulty} setDiff={setDailyDifficulty} showCount={false} />
 
             <button onClick={handleDailyGenerate} disabled={dailyGenerating || enabledCats.length === 0}
-              className="w-full flex items-center justify-center gap-2 py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl font-medium text-sm mb-4 transition-colors">
+              className="w-full flex items-center justify-center gap-2 py-3 bg-accent hover:bg-accent-bright disabled:opacity-40 disabled:cursor-not-allowed rounded-xl font-medium text-sm mb-4 transition-colors">
               <Sparkles size={16} />
               {dailyGenerating ? "Generating daily set…"
                 : dailyResult ? `Generate New Set (${dailyTotal} questions)`
@@ -779,14 +779,14 @@ export default function GeneratePage() {
             </button>
 
             {dailyError && (
-              <div className="flex items-start gap-2 p-4 bg-red-900/30 border border-red-800 rounded-xl text-sm text-red-300 mb-4">
+              <div className="flex items-start gap-2 p-4 bg-status-error/12 border border-status-error/30 rounded-xl text-sm text-status-error mb-4">
                 <AlertCircle size={15} className="mt-0.5 shrink-0" />{dailyError}
               </div>
             )}
 
             {dailyResult && (
               <Results
-                questions={dailyResult.questions} source={dailyResult.source} accent="bg-purple-700 hover:bg-purple-600 border border-purple-600"
+                questions={dailyResult.questions} source={dailyResult.source} accent="bg-accent hover:bg-accent-bright border border-accent/40"
                 onRemove={(i) => { setDailyResult((p) => p ? { ...p, questions: p.questions.filter((_, j) => j !== i) } : p); setDailySaveStatus(null); }}
                 onExport={() => exportCSV(dailyResult.questions, getDailyCSVName())}
                 onSave={handleDailySave} saved={dailySaveStatus !== null} isSaving={dailySaving} ss={dailySaveStatus}

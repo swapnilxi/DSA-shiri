@@ -6,9 +6,9 @@ import { api } from "@/lib/api";
 import type { Question } from "@/lib/api";
 
 const DIFF_COLORS: Record<string, string> = {
-  Easy: "bg-green-900/30 border-green-800/50 text-green-400",
-  Medium: "bg-yellow-900/30 border-yellow-800/50 text-yellow-400",
-  Hard: "bg-red-900/30 border-red-800/50 text-red-400",
+  Easy: "bg-status-ok/10 border-status-ok/30 text-status-ok",
+  Medium: "bg-status-warn/10 border-status-warn/30 text-status-warn",
+  Hard: "bg-status-error/12 border-status-error/30 text-status-error",
 };
 
 const PAGE_SIZE = 20;
@@ -71,33 +71,45 @@ export default function PracticeListPage() {
   }, [hasMore, visibleCount]);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
+    <div className="min-h-screen bg-surface-0 text-text-primary">
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-gray-950/95 backdrop-blur border-b border-gray-800 px-6 py-3">
-        <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
-          <p className="text-sm font-semibold text-gray-200">Practice Questions</p>
-          <p className="text-xs text-gray-600">
-            {loading ? "Loading…" : `${visible.length} of ${filtered.length}${filtered.length < questions.length ? ` (filtered from ${questions.length})` : ""}`}
-          </p>
+      <header className="sticky top-0 z-20 bg-surface-0/85 backdrop-blur-md border-b border-border-subtle px-6 py-4">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight bg-gradient-to-r from-text-primary to-text-primary bg-clip-text text-transparent">
+                DSA Arena
+              </h1>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-accent/15 text-accent border border-accent/50">
+                FAANG Problem Set
+              </span>
+            </div>
+            <p className="text-xs text-text-secondary mt-0.5">
+              Curated algorithmic challenges with multi-turn AI hints, progressive breakdowns, and vocal solution review
+            </p>
+          </div>
+          <div className="text-xs text-text-secondary font-mono bg-surface-1/80 border border-border-subtle px-3 py-1.5 rounded-xl shrink-0 self-start sm:self-auto">
+            {loading ? "Loading challenges..." : `${visible.length} of ${filtered.length} problems shown`}
+          </div>
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">
+      <div className="max-w-6xl mx-auto px-6 py-6 space-y-5">
         {/* Search */}
         <div className="relative">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
           </svg>
           <input
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search questions, topics, categories…"
-            className="w-full pl-10 pr-4 py-2.5 bg-gray-900 border border-gray-700 rounded-xl text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-600 transition-colors"
+            placeholder="Search problems by name, data structure, category, or target company..."
+            className="w-full pl-10 pr-4 py-3 bg-surface-1/80 border border-border-subtle rounded-2xl text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/30 transition-all shadow-inner"
           />
           {searchQuery && (
-            <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
+            <button onClick={() => setSearchQuery("")} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-text-secondary hover:text-white">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
@@ -113,10 +125,10 @@ export default function PracticeListPage() {
               onClick={() => setFilterDifficulty(filterDifficulty === d ? "" : d)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                 filterDifficulty === d
-                  ? d === "Easy"   ? "bg-green-900/60 border-green-600 text-green-300"
-                  : d === "Medium" ? "bg-yellow-900/60 border-yellow-600 text-yellow-300"
-                  :                  "bg-red-900/60 border-red-600 text-red-300"
-                  : "bg-gray-800/60 border-gray-700 text-gray-500 hover:border-gray-600 hover:text-gray-400"
+                  ? d === "Easy"   ? "bg-status-ok/10 border-status-ok/40 text-status-ok"
+                  : d === "Medium" ? "bg-status-warn/10 border-status-warn/40 text-status-warn"
+                  :                  "bg-status-error/12 border-status-error/45 text-status-error"
+                  : "bg-surface-2/60 border-border-default text-text-muted hover:border-border-strong hover:text-text-secondary"
               }`}
             >
               {d}
@@ -131,14 +143,14 @@ export default function PracticeListPage() {
                 onChange={e => setFilterCategory(e.target.value)}
                 className={`appearance-none pl-3 pr-7 py-1.5 rounded-full text-xs font-medium border transition-colors cursor-pointer focus:outline-none ${
                   filterCategory
-                    ? "bg-purple-900/50 border-purple-600 text-purple-300"
-                    : "bg-gray-800/60 border-gray-700 text-gray-500 hover:border-gray-600"
+                    ? "bg-gold/10 border-accent/40 text-gold"
+                    : "bg-surface-2/60 border-border-default text-text-muted hover:border-border-strong"
                 }`}
               >
                 <option value="">Category</option>
                 {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
               </select>
-              <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-text-muted" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
               </svg>
             </div>
@@ -152,14 +164,14 @@ export default function PracticeListPage() {
                 onChange={e => setFilterTopic(e.target.value)}
                 className={`appearance-none pl-3 pr-7 py-1.5 rounded-full text-xs font-medium border transition-colors cursor-pointer focus:outline-none ${
                   filterTopic
-                    ? "bg-blue-900/50 border-blue-600 text-blue-300"
-                    : "bg-gray-800/60 border-gray-700 text-gray-500 hover:border-gray-600"
+                    ? "bg-accent/50 border-accent/40 text-accent"
+                    : "bg-surface-2/60 border-border-default text-text-muted hover:border-border-strong"
                 }`}
               >
                 <option value="">Topic</option>
                 {topics.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
-              <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-text-muted" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
               </svg>
             </div>
@@ -168,7 +180,7 @@ export default function PracticeListPage() {
           {hasFilters && (
             <button
               onClick={() => { setFilterDifficulty(""); setFilterCategory(""); setFilterTopic(""); setSearchQuery(""); }}
-              className="px-3 py-1.5 rounded-full text-xs border border-gray-700 text-gray-600 hover:text-gray-400 hover:border-gray-600 transition-colors"
+              className="px-3 py-1.5 rounded-full text-xs border border-border-default text-text-muted hover:text-text-secondary hover:border-border-strong transition-colors"
             >
               ✕ Clear
             </button>
@@ -179,40 +191,40 @@ export default function PracticeListPage() {
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="h-32 bg-gray-900 border border-gray-800 rounded-2xl animate-pulse" />
+              <div key={i} className="h-32 bg-surface-1 border border-border-subtle rounded-2xl animate-pulse" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-20 text-gray-600">
+          <div className="text-center py-20 text-text-muted">
             <p className="text-3xl mb-3">🔍</p>
             <p className="text-sm">No questions match your filters</p>
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               {visible.map(q => (
                 <button
                   key={q.id}
                   onClick={() => router.push(`/practice/${q.id}`)}
-                  className="text-left p-4 bg-gray-900 border border-gray-800 rounded-2xl hover:border-gray-600 hover:bg-gray-800/60 transition-all group"
+                  className="text-left p-5 bg-surface-1/65 border border-border-subtle/80 rounded-2xl hover:border-accent/50 hover:bg-surface-2 hover:shadow-lg hover:shadow-accent/20 hover:-translate-y-0.5 transition-all group flex flex-col justify-between"
                 >
-                  <p className="text-sm text-gray-200 leading-relaxed line-clamp-3 group-hover:text-white transition-colors mb-3">
+                  <p className="text-sm font-medium text-text-primary leading-relaxed line-clamp-3 group-hover:text-white transition-colors mb-4">
                     {q.question}
                   </p>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-xs px-2 py-0.5 rounded bg-gray-800 border border-gray-700 text-gray-400">
+                  <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border-subtle/60">
+                    <span className="text-xs px-2.5 py-0.5 rounded-lg bg-surface-2/80 border border-border-default/60 text-text-primary font-medium">
                       {q.topic}
                     </span>
                     {q.category && (
-                      <span className="text-xs px-2 py-0.5 rounded bg-purple-900/30 border border-purple-800/50 text-purple-400">
+                      <span className="text-xs px-2.5 py-0.5 rounded-lg bg-gold/10 border border-gold/20 text-gold font-medium">
                         {q.category}
                       </span>
                     )}
-                    <span className={`text-xs px-2 py-0.5 rounded border font-medium ${DIFF_COLORS[q.difficulty]}`}>
+                    <span className={`text-xs px-2.5 py-0.5 rounded-lg border font-semibold ${DIFF_COLORS[q.difficulty]}`}>
                       {q.difficulty}
                     </span>
                     {q.company && (
-                      <span className="text-xs text-gray-600">@ {q.company}</span>
+                      <span className="text-xs text-text-muted font-medium ml-auto">@ {q.company}</span>
                     )}
                   </div>
                 </button>
@@ -221,14 +233,14 @@ export default function PracticeListPage() {
 
             {/* Infinite scroll sentinel */}
             {hasMore && (
-              <div ref={sentinelRef} className="flex items-center justify-center py-6 gap-3 text-gray-600 text-xs">
-                <div className="w-4 h-4 border border-gray-700 border-t-gray-500 rounded-full animate-spin" />
+              <div ref={sentinelRef} className="flex items-center justify-center py-6 gap-3 text-text-muted text-xs">
+                <div className="w-4 h-4 border border-border-default border-t-text-muted rounded-full animate-spin" />
                 Loading more…
               </div>
             )}
 
             {!hasMore && filtered.length > PAGE_SIZE && (
-              <p className="text-center text-xs text-gray-700 py-4">All {filtered.length} questions loaded</p>
+              <p className="text-center text-xs text-text-muted py-4">All {filtered.length} questions loaded</p>
             )}
           </>
         )}

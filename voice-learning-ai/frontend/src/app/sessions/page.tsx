@@ -9,28 +9,28 @@ import {
 import { api, Session, SessionResponse, SessionAnalysis } from "@/lib/api";
 
 function scoreColor(s?: number | null) {
-  if (s == null) return "text-gray-500";
-  if (s >= 80) return "text-green-400";
-  if (s >= 60) return "text-yellow-400";
-  return "text-red-400";
+  if (s == null) return "text-text-muted";
+  if (s >= 80) return "text-status-ok";
+  if (s >= 60) return "text-status-warn";
+  return "text-status-error";
 }
 function scoreBg(s?: number | null) {
-  if (s == null) return "border-gray-700 bg-gray-800/60";
-  if (s >= 80) return "border-green-800/60 bg-green-950/40";
-  if (s >= 60) return "border-yellow-800/60 bg-yellow-950/40";
-  return "border-red-800/60 bg-red-950/40";
+  if (s == null) return "border-border-default bg-surface-2/60";
+  if (s >= 80) return "border-status-ok/30 bg-status-ok/10";
+  if (s >= 60) return "border-status-warn/30 bg-status-warn/10";
+  return "border-status-error/30 bg-status-error/10";
 }
 const STATUS_CHIP: Record<string, string> = {
-  completed: "bg-green-900/40 text-green-400 border-green-800/50",
-  active:    "bg-blue-900/40  text-blue-400  border-blue-800/50",
-  abandoned: "bg-gray-800     text-gray-500  border-gray-700",
+  completed: "bg-status-ok/10 text-status-ok border-status-ok/30",
+  active:    "bg-accent/40  text-accent  border-accent/25",
+  abandoned: "bg-surface-2     text-text-muted  border-border-default",
 };
 
 function ReadinessBadge({ value }: { value: SessionAnalysis["readiness"] }) {
   const cfg = {
-    Strong:      { cls: "bg-green-900/50 text-green-300 border-green-700",   icon: <CheckCircle2 size={12} /> },
-    "Needs Work":{ cls: "bg-yellow-900/50 text-yellow-300 border-yellow-700", icon: <AlertTriangle size={12} /> },
-    "Not Ready": { cls: "bg-red-900/50 text-red-300 border-red-700",         icon: <XCircle size={12} /> },
+    Strong:      { cls: "bg-status-ok/10 text-status-ok border-status-ok/35",   icon: <CheckCircle2 size={12} /> },
+    "Needs Work":{ cls: "bg-status-warn/10 text-status-warn border-status-warn/35", icon: <AlertTriangle size={12} /> },
+    "Not Ready": { cls: "bg-status-error/12 text-status-error border-status-error/35",         icon: <XCircle size={12} /> },
   }[value];
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${cfg.cls}`}>
@@ -138,13 +138,13 @@ export default function SessionsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="min-h-screen bg-surface-0 text-white">
       {/* Sticky header */}
-      <div className="sticky top-0 z-20 bg-gray-950/95 backdrop-blur border-b border-gray-800/60">
+      <div className="sticky top-0 z-20 bg-surface-0/95 backdrop-blur border-b border-border-subtle/60">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center gap-4">
           <div className="flex-1">
             <h1 className="text-lg font-bold leading-tight">All Sessions</h1>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-text-muted mt-0.5">
               {sessions.length} total{filtered.length !== sessions.length ? `, ${filtered.length} shown` : ""}
             </p>
           </div>
@@ -152,7 +152,7 @@ export default function SessionsPage() {
             <button
               onClick={handleDeleteAll}
               disabled={deletingAll}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-950/50 border border-red-900/60 text-red-400 hover:bg-red-900/60 text-xs transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-status-error/10 border border-status-error/25 text-status-error hover:bg-status-error/12 text-xs transition-colors disabled:opacity-50"
             >
               {deletingAll ? <RefreshCw size={12} className="animate-spin" /> : <Trash2 size={12} />}
               Delete {filtered.length > 1 ? `all ${filtered.length}` : "session"}
@@ -161,15 +161,15 @@ export default function SessionsPage() {
         </div>
         <div className="max-w-5xl mx-auto px-6 pb-4">
           <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
             <input
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search sessions by title or topic…"
-              className="w-full pl-9 pr-9 py-2 bg-gray-900 border border-gray-700 rounded-xl text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-700 transition-colors"
+              className="w-full pl-9 pr-9 py-2 bg-surface-1 border border-border-default rounded-xl text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent/35 transition-colors"
             />
             {query && (
-              <button onClick={() => setQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+              <button onClick={() => setQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary">
                 <X size={14} />
               </button>
             )}
@@ -182,21 +182,21 @@ export default function SessionsPage() {
         {loading && (
           <div className="space-y-3">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-24 rounded-2xl bg-gray-900 border border-gray-800 animate-pulse" />
+              <div key={i} className="h-24 rounded-2xl bg-surface-1 border border-border-subtle animate-pulse" />
             ))}
           </div>
         )}
 
         {!loading && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-24 text-center">
-            <Mic size={40} className="text-gray-700 mb-4" />
-            <p className="text-gray-400 font-medium">
+            <Mic size={40} className="text-text-muted mb-4" />
+            <p className="text-text-secondary font-medium">
               {query ? "No sessions match your search." : "No sessions yet."}
             </p>
             {!query && (
               <button
                 onClick={() => router.push("/dashboard")}
-                className="mt-4 px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-600 text-sm font-medium transition-colors"
+                className="mt-4 px-4 py-2 rounded-xl bg-accent hover:bg-accent-bright text-sm font-medium transition-colors"
               >
                 Start your first interview
               </button>
@@ -211,33 +211,33 @@ export default function SessionsPage() {
 
               {/* Card header */}
               <div 
-                className="p-4 flex items-center gap-3 cursor-pointer hover:bg-gray-900/40 transition-colors"
+                className="p-4 flex items-center gap-3 cursor-pointer hover:bg-surface-1/40 transition-colors"
                 onClick={() => toggleExpand(s.id)}
               >
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-gray-900/70 border ${scoreBg(s.total_score)}`}>
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-surface-1/70 border ${scoreBg(s.total_score)}`}>
                   <span className={`text-base font-bold ${scoreColor(s.total_score)}`}>
                     {s.total_score != null ? s.total_score.toFixed(0) : "—"}
                   </span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-100 truncate">{s.title}</p>
+                  <p className="text-sm font-semibold text-text-primary truncate">{s.title}</p>
                   <div className="flex flex-wrap items-center gap-2 mt-1">
-                    <span className="flex items-center gap-1 text-xs text-gray-500">
+                    <span className="flex items-center gap-1 text-xs text-text-muted">
                       <Calendar size={11} /> {new Date(s.started_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                     </span>
                     {s.topic && s.topic !== "random" && (
-                      <span className="text-xs text-blue-400 bg-blue-900/30 border border-blue-800/40 rounded px-1.5 py-0.5 truncate max-w-[140px]">{s.topic}</span>
+                      <span className="text-xs text-accent bg-accent/30 border border-accent/25 rounded px-1.5 py-0.5 truncate max-w-[140px]">{s.topic}</span>
                     )}
                     <span className={`text-xs border rounded px-1.5 py-0.5 capitalize ${STATUS_CHIP[s.status] ?? STATUS_CHIP.abandoned}`}>{s.status}</span>
                     {s.follow_up_mode && (
-                      <span className="text-xs text-emerald-400 bg-emerald-900/30 border border-emerald-800/40 rounded px-1.5 py-0.5">Follow-up</span>
+                      <span className="text-xs text-status-ok bg-status-ok/10 border border-status-ok/30 rounded px-1.5 py-0.5">Follow-up</span>
                     )}
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/session/${s.id}`); }}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-blue-900/50 border border-gray-700 hover:border-blue-700 text-xs text-gray-400 hover:text-blue-300 transition-all"
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface-2 hover:bg-accent/50 border border-border-default hover:border-accent/35 text-xs text-text-secondary hover:text-accent transition-all"
                     title="View detailed feedback"
                   >
                     <Eye size={12} /> Feedback
@@ -245,7 +245,7 @@ export default function SessionsPage() {
                   <button
                     onClick={(e) => { e.stopPropagation(); handleAnalyze(s.id); }}
                     disabled={card.analysisState === "loading"}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-purple-900/30 hover:bg-purple-900/60 border border-purple-800/50 hover:border-purple-700 text-xs text-purple-300 transition-all disabled:opacity-50"
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gold/10 hover:bg-gold/10 border border-gold/20 hover:border-accent/45 text-xs text-gold transition-all disabled:opacity-50"
                     title="Generate AI evaluation"
                   >
                     {card.analysisState === "loading" ? <RefreshCw size={12} className="animate-spin" /> : <BrainCircuit size={12} />}
@@ -254,14 +254,14 @@ export default function SessionsPage() {
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}
                     disabled={deletingId === s.id}
-                    className="p-1.5 rounded-lg bg-gray-800 hover:bg-red-900/40 border border-gray-700 hover:border-red-800 text-gray-500 hover:text-red-400 transition-all"
+                    className="p-1.5 rounded-lg bg-surface-2 hover:bg-status-error/12 border border-border-default hover:border-status-error/30 text-text-muted hover:text-status-error transition-all"
                     title="Delete session"
                   >
                     {deletingId === s.id ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); toggleExpand(s.id); }}
-                    className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-500 hover:text-gray-300 transition-all"
+                    className="p-1.5 rounded-lg bg-surface-2 hover:bg-surface-3 border border-border-default text-text-muted hover:text-text-primary transition-all"
                     title={card.expanded ? "Collapse" : "Show questions"}
                   >
                     {card.expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -271,36 +271,36 @@ export default function SessionsPage() {
 
               {/* Inline analysis */}
               {(card.analysisState === "done" || card.analysisState === "error") && (
-                <div className="border-t border-gray-800/60 bg-gray-950/40 px-4 py-3">
+                <div className="border-t border-border-subtle/60 bg-surface-0/40 px-4 py-3">
                   {card.analysisState === "error" && (
-                    <p className="text-xs text-red-400">{card.analysisError}</p>
+                    <p className="text-xs text-status-error">{card.analysisError}</p>
                   )}
                   {card.analysisState === "done" && card.analysis && (
                     <div className="space-y-3">
                       <div className="flex items-center gap-3 flex-wrap">
-                        <span className="flex items-center gap-1.5 text-xs text-purple-300 font-semibold">
+                        <span className="flex items-center gap-1.5 text-xs text-gold font-semibold">
                           <Sparkles size={12} /> AI Evaluation
                         </span>
                         <ReadinessBadge value={card.analysis.readiness} />
                       </div>
-                      <p className="text-xs text-gray-300 leading-relaxed">{card.analysis.summary}</p>
+                      <p className="text-xs text-text-primary leading-relaxed">{card.analysis.summary}</p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {card.analysis.strengths.length > 0 && (
                           <div>
-                            <p className="text-xs font-semibold text-green-400 mb-1.5 flex items-center gap-1"><CheckCircle2 size={11} /> Strengths</p>
+                            <p className="text-xs font-semibold text-status-ok mb-1.5 flex items-center gap-1"><CheckCircle2 size={11} /> Strengths</p>
                             <ul className="space-y-1">
                               {card.analysis.strengths.slice(0, 3).map((str, i) => (
-                                <li key={i} className="text-xs text-gray-400 flex items-start gap-1.5"><span className="text-green-500 mt-0.5 shrink-0">•</span>{str}</li>
+                                <li key={i} className="text-xs text-text-secondary flex items-start gap-1.5"><span className="text-status-ok mt-0.5 shrink-0">•</span>{str}</li>
                               ))}
                             </ul>
                           </div>
                         )}
                         {card.analysis.weak_areas.length > 0 && (
                           <div>
-                            <p className="text-xs font-semibold text-red-400 mb-1.5 flex items-center gap-1"><Target size={11} /> Weak Areas</p>
+                            <p className="text-xs font-semibold text-status-error mb-1.5 flex items-center gap-1"><Target size={11} /> Weak Areas</p>
                             <ul className="space-y-1">
                               {card.analysis.weak_areas.slice(0, 3).map((w, i) => (
-                                <li key={i} className="text-xs text-gray-400 flex items-start gap-1.5"><span className="text-red-500 mt-0.5 shrink-0">•</span>{w.topic} — {w.reason}</li>
+                                <li key={i} className="text-xs text-text-secondary flex items-start gap-1.5"><span className="text-status-error mt-0.5 shrink-0">•</span>{w.topic} — {w.reason}</li>
                               ))}
                             </ul>
                           </div>
@@ -308,17 +308,17 @@ export default function SessionsPage() {
                       </div>
                       {card.analysis.learning_plan.length > 0 && (
                         <div>
-                          <p className="text-xs font-semibold text-blue-400 mb-1.5 flex items-center gap-1"><BarChart2 size={11} /> Learning Plan</p>
+                          <p className="text-xs font-semibold text-accent mb-1.5 flex items-center gap-1"><BarChart2 size={11} /> Learning Plan</p>
                           <div className="flex flex-wrap gap-2">
                             {card.analysis.learning_plan.slice(0, 4).map((lp, i) => (
-                              <span key={i} className="text-xs bg-blue-900/30 border border-blue-800/40 text-blue-300 rounded-lg px-2 py-1">{lp.priority}. {lp.action}</span>
+                              <span key={i} className="text-xs bg-accent/30 border border-accent/25 text-accent rounded-lg px-2 py-1">{lp.priority}. {lp.action}</span>
                             ))}
                           </div>
                         </div>
                       )}
                       <button
                         onClick={() => router.push(`/dashboard/session/${s.id}`)}
-                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors"
+                        className="text-xs text-accent hover:text-accent flex items-center gap-1 transition-colors"
                       >
                         Full detailed feedback <ExternalLink size={11} />
                       </button>
@@ -329,39 +329,39 @@ export default function SessionsPage() {
 
               {/* Expanded questions */}
               {card.expanded && (
-                <div className="border-t border-gray-800/60 bg-gray-950/60 px-4 py-3">
+                <div className="border-t border-border-subtle/60 bg-surface-0/60 px-4 py-3">
                   {card.detailLoading && (
-                    <div className="space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="h-10 rounded-xl bg-gray-800 animate-pulse" />)}</div>
+                    <div className="space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="h-10 rounded-xl bg-surface-2 animate-pulse" />)}</div>
                   )}
                   {!card.detailLoading && card.responses.length === 0 && (
-                    <p className="text-xs text-gray-600 py-3 text-center">No responses recorded for this session.</p>
+                    <p className="text-xs text-text-muted py-3 text-center">No responses recorded for this session.</p>
                   )}
                   {!card.detailLoading && card.responses.length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-2 flex items-center gap-1.5">
+                      <p className="text-xs font-semibold text-text-muted mb-2 flex items-center gap-1.5">
                         <BookOpen size={11} /> Questions answered — click to practice
                       </p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                         {card.responses.map((resp, i) => {
                           const diffCls =
-                            resp.difficulty === "Hard"   ? "bg-red-900/50 text-red-300 border-red-800" :
-                            resp.difficulty === "Medium" ? "bg-yellow-900/50 text-yellow-300 border-yellow-800" :
-                                                          "bg-green-900/50 text-green-300 border-green-800";
+                            resp.difficulty === "Hard"   ? "bg-status-error/12 text-status-error border-status-error/30" :
+                            resp.difficulty === "Medium" ? "bg-status-warn/10 text-status-warn border-status-warn/30" :
+                                                          "bg-status-ok/10 text-status-ok border-status-ok/30";
                           return (
                             <button
                               key={resp.id}
                               onClick={() => window.open(`/practice/${resp.question_id}`, "_blank")}
-                              className="text-left group flex items-start gap-2.5 p-2.5 rounded-xl bg-gray-800/60 border border-gray-700/60 hover:border-blue-700 hover:bg-blue-900/10 transition-all"
+                              className="text-left group flex items-start gap-2.5 p-2.5 rounded-xl bg-surface-2/60 border border-border-default/60 hover:border-accent/35 hover:bg-accent/10 transition-all"
                             >
-                              <span className="text-xs text-gray-600 font-mono shrink-0 mt-0.5 w-4">{i + 1}.</span>
+                              <span className="text-xs text-text-muted font-mono shrink-0 mt-0.5 w-4">{i + 1}.</span>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                                   <span className={`text-[10px] font-medium border rounded px-1 py-0.5 ${diffCls}`}>{resp.difficulty}</span>
-                                  <span className="text-[10px] text-blue-400 bg-blue-900/30 border border-blue-800/40 rounded px-1 py-0.5 truncate max-w-[120px]">{resp.topic}</span>
+                                  <span className="text-[10px] text-accent bg-accent/30 border border-accent/25 rounded px-1 py-0.5 truncate max-w-[120px]">{resp.topic}</span>
                                   <span className={`text-[10px] font-bold ml-auto ${scoreColor(resp.total)}`}>{resp.total}/100</span>
                                 </div>
-                                <p className="text-xs text-gray-300 line-clamp-2 leading-snug">{resp.question}</p>
-                                <p className="text-[10px] text-gray-600 group-hover:text-blue-500 mt-1 transition-colors flex items-center gap-1">
+                                <p className="text-xs text-text-primary line-clamp-2 leading-snug">{resp.question}</p>
+                                <p className="text-[10px] text-text-muted group-hover:text-accent mt-1 transition-colors flex items-center gap-1">
                                   <ExternalLink size={9} /> Open in practice mode
                                 </p>
                               </div>

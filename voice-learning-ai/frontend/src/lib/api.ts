@@ -71,6 +71,20 @@ export const api = {
   removeGeminiKey: () =>
     request<{ ok: boolean; configured: boolean }>("/config/gemini-key", { method: "DELETE" }),
 
+  testLLM: (provider: "gemini" | "deepseek", model: string, api_key?: string) =>
+    request<{
+      ok: boolean;
+      provider: string;
+      model: string;
+      latency_ms?: number;
+      status_code?: number;
+      message: string;
+    }>("/config/test-llm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, model, api_key: api_key ?? "" }),
+    }),
+
   saveCartesiaKey: (api_key: string) =>
     request<{ ok: boolean; configured: boolean }>("/config/cartesia-key", {
       method: "POST",
@@ -379,7 +393,91 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ transcript, scores, model }),
     }),
+
+  submitPythonCode: (
+    questionId: number,
+    code: string,
+    opts?: { hints_used?: number; model?: string }
+  ) =>
+    request<CodeSubmissionResponse>(`/practice/${questionId}/submit-code`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        code,
+        hints_used: opts?.hints_used ?? 0,
+        model: opts?.model,
+      }),
+    }),
+
+  getQuestionSubmissions: (questionId: number) =>
+    request<DsaSubmissionRecord[]>(`/practice/${questionId}/submissions`),
+
+  getLearningState: () =>
+    request<LearningProfileState>("/practice/user/learning-state"),
 };
+
+export interface CodeReviewEvaluation {
+  status: "accepted" | "needs_revision";
+  correctness_score: number;
+  efficiency_score: number;
+  time_complexity: string;
+  space_complexity: string;
+  feedback: string;
+  strengths: string[];
+  edge_cases: string[];
+  optimizations: string[];
+}
+
+export interface CodeSubmissionResponse {
+  submission_id: number;
+  evaluation: CodeReviewEvaluation;
+  xp_earned: number;
+  new_total_xp: number;
+  level: number;
+  streak_days: number;
+  next_review_days: number;
+  topic: string;
+}
+
+export interface DsaSubmissionRecord {
+  id: number;
+  question_id: number;
+  code: string;
+  language: string;
+  status: "accepted" | "needs_revision" | "failed";
+  efficiency_score: number;
+  correctness_score: number;
+  xp_earned: number;
+  feedback: string;
+  time_complexity: string;
+  space_complexity: string;
+  strengths: string[];
+  edge_cases: string[];
+  optimizations: string[];
+  submitted_at: string;
+  next_review_at?: string;
+}
+
+export interface LearningProfileState {
+  id?: number;
+  total_xp: number;
+  level: number;
+  streak_days: number;
+  last_active_date?: string;
+  achievements: string[];
+  solved_count: number;
+  due_revisions: {
+    id: number;
+    question_id: number;
+    question: string;
+    topic: string;
+    difficulty: string;
+    submitted_at: string;
+    next_review_at: string;
+  }[];
+  daily_quest: Question | null;
+  nova_message: string;
+}
 
 export interface Question {
   id: number;

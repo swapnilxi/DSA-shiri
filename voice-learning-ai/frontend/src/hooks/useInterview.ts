@@ -54,6 +54,7 @@ export interface InterviewFollowupReport {
 
 export function useInterview(sessionId: number | null) {
   const ws = useRef<WebSocket | null>(null);
+  const connectTimer = useRef<number | null>(null);
   const audioCtx = useRef<AudioContext | null>(null);
   const [events, setEvents] = useState<InterviewEvent[]>([]);
   const [connected, setConnected] = useState(false);
@@ -62,41 +63,105 @@ export function useInterview(sessionId: number | null) {
     setEvents((prev) => [...prev, e]);
 
   const connect = useCallback(() => {
-    if (!sessionId || ws.current) return;
+    if (!sessionId) return;
 
-    const socket = new WebSocket(`${WS_URL}/interview/ws/${sessionId}`);
-    socket.binaryType = "arraybuffer";
+    // Reuse a live socket — React StrictMode (mount → cleanup → mount) and
+    // re-renders must never open a second connection for the same session.
+    const existing = ws.current;
+    if (existing && (existing.readyState === WebSocket.CONNECTING || existing.readyState === WebSocket.OPEN)) {
+      return;
+    }
+    ws.current = null; // stale CLOSING/CLOSED socket — replace it
 
-    socket.onopen = () => setConnected(true);
-    socket.onclose = () => setConnected(false);
+    // Defer creation by a tick so an immediate unmount (StrictMode, Fast
+    // Refresh, fast navigation) cancels it instead of leaving a socket that
+    // connects after we are gone.
+    if (connectTimer.current !== null) window.clearTimeout(connectTimer.current);
+    connectTimer.current = window.setTimeout(() => {
+      connectTimer.current = null;
 
-    socket.onmessage = async (msg) => {
-      if (msg.data instanceof ArrayBuffer) {
-        pushEvent({ type: "audio_start" });
-        await playAudio(msg.data);
-        pushEvent({ type: "audio_end" });
-      } else {
-        const event: InterviewEvent = JSON.parse(msg.data);
-        pushEvent(event);
-      }
-    };
+      const socket = new WebSocket(`${WS_URL}/interview/ws/${sessionId}`);
+      socket.binaryType = "arraybuffer";
 
-    ws.current = socket;
+      socket.onopen = () => setConnected(true);
+      socket.onclose = () => {
+        setConnected(false);
+        // Only clear the ref if this socket is still the active one.
+        if (ws.current === socket) ws.current = null;
+      };
+      socket.onerror = () => {
+        pushEvent({
+          type: "status",
+          message: "Lost the connection to the interview server. Check that the backend is running on port 8000.",
+        });
+      };
+
+      socket.onmessage = async (msg) => {
+        if (msg.data instanceof ArrayBuffer) {
+          pushEvent({ type: "audio_start" });
+          await playAudio(msg.data);
+          pushEvent({ type: "audio_end" });
+        } else {
+          const event: InterviewEvent = JSON.parse(msg.data);
+          pushEvent(event);
+        }
+      };
+
+      ws.current = socket;
+    }, 0);
   }, [sessionId]);
 
   const sendAudio = useCallback(async (blob: Blob) => {
-    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
+    const socket = ws.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      pushEvent({
+        type: "status",
+        message: "Could not send the recording — the connection is not open. Click Reconnect and try again.",
+      });
+      return;
+    }
     const buf = await blob.arrayBuffer();
-    ws.current.send(buf);
+    socket.send(buf);
   }, []);
 
   const sendControl = useCallback((action: string) => {
-    ws.current?.send(JSON.stringify({ action }));
+    const socket = ws.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+    socket.send(JSON.stringify({ action }));
+    return true;
   }, []);
 
   const disconnect = useCallback(() => {
-    ws.current?.close();
-    ws.current = null;
+    if (connectTimer.current !== null) {
+      window.clearTimeout(connectTimer.current);
+      connectTimer.current = null;
+    }
+
+    const socket = ws.current;
+    ws.current = null; // idempotent: a second call is a no-op
+    if (!socket) return;
+
+    // Detach handlers so a late open/close cannot update unmounted state.
+    socket.onopen = null;
+    socket.onclose = null;
+    socket.onerror = null;
+    socket.onmessage = null;
+
+    if (socket.readyState === WebSocket.CONNECTING) {
+      // Never abort the handshake itself: closing a CONNECTING socket makes
+      // the browser log "WebSocket is closed before the connection is
+      // established". Close it the instant it opens instead.
+      socket.onopen = () => socket.close();
+      return;
+    }
+    try {
+      // close() is non-blocking — it queues a CLOSE frame and returns. We pass
+      // 1000 (normal) so the backend tears the session down immediately instead
+      // of treating it as an abnormal drop.
+      socket.close(1000);
+    } catch {
+      /* socket already gone */
+    }
   }, []);
 
   async function playAudio(buf: ArrayBuffer) {

@@ -28,6 +28,21 @@ def _get_kokoro():
     return _kokoro
 
 
+def _preload_tts() -> None:
+    """
+    Warm up the configured local TTS engine at startup so the first question of
+    the day doesn't pay the model-load latency mid-interview.
+    (Call from a worker thread — loading Kokoro imports torch/onnx.)
+    """
+    try:
+        if settings.tts_engine == "kokoro":
+            _get_kokoro()
+        elif settings.tts_engine == "piper":
+            _piper_speak("Warm up.")
+    except Exception:
+        pass
+
+
 async def speak(text: str) -> bytes:
     """
     Convert text to speech. Returns WAV audio bytes.
@@ -42,7 +57,9 @@ async def speak(text: str) -> bytes:
     if settings.tts_engine == "apple":
         return await _say_speak(text)
 
-    kokoro = _get_kokoro()
+    # Loading the pipeline imports torch/onnx and reads model weights; doing
+    # that on the event loop stalls every HTTP request and WebSocket handshake.
+    kokoro = await asyncio.to_thread(_get_kokoro)
     if kokoro is not None:
         return await asyncio.to_thread(_kokoro_speak, text, kokoro)
     return await _say_speak(text)

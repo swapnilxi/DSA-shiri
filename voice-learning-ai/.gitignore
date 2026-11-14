@@ -1,3 +1,6 @@
+# Local data (SQLite lives on disk, never in Git)
+data/voicelearning.db
+
 # Python
 __pycache__/
 *.py[cod]

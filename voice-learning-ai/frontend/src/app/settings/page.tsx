@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, CheckCircle, AlertCircle, ArrowLeft, Eye, EyeOff, Key, Trash2, Cpu, Volume2, Mic, ChevronDown, Brain } from "lucide-react";
+import { Upload, CheckCircle, AlertCircle, ArrowLeft, Eye, EyeOff, Key, Trash2, Cpu, Volume2, Mic, ChevronDown, Brain, PlugZap } from "lucide-react";
 import { api } from "@/lib/api";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 
@@ -11,9 +11,12 @@ const DEEPSEEK_LABELS: Record<string, string> = {
   "deepseek-reasoner": "DeepSeek R1 (Reasoner)",
 };
 const GEMINI_LABELS: Record<string, string> = {
-  "gemini-2.0-flash": "Gemini 2.0 Flash ⚡ (free tier)",
-  "gemini-1.5-flash": "Gemini 1.5 Flash (free tier)",
+  "gemini-2.5-flash": "Gemini 2.5 Flash (free tier)",
+  "gemini-flash-lite-latest": "Gemini 2.5 Flash-Lite (free tier, fastest)",
 };
+
+// Sentinel <option> value meaning "user will type a custom model id".
+const CUSTOM_MODEL = "__custom__";
 
 function InfoTip({ text }: { text: string }) {
   const [show, setShow] = useState(false);
@@ -24,11 +27,11 @@ function InfoTip({ text }: { text: string }) {
         onMouseLeave={() => setShow(false)}
         onFocus={() => setShow(true)}
         onBlur={() => setShow(false)}
-        className="w-4 h-4 rounded-full bg-gray-700 text-gray-400 text-[10px] font-bold leading-none flex items-center justify-center hover:bg-gray-600 hover:text-white"
+        className="w-4 h-4 rounded-full bg-surface-3 text-text-secondary text-[10px] font-bold leading-none flex items-center justify-center hover:bg-surface-3 hover:text-white"
         aria-label="More info"
       >i</button>
       {show && (
-        <span className="absolute left-5 top-0 z-50 w-64 bg-gray-800 border border-gray-600 rounded-xl p-3 text-xs text-gray-300 leading-relaxed shadow-xl">
+        <span className="absolute left-5 top-0 z-50 w-64 bg-surface-2 border border-border-strong rounded-xl p-3 text-xs text-text-primary leading-relaxed shadow-xl">
           {text}
         </span>
       )}
@@ -87,6 +90,7 @@ export default function SettingsPage() {
   const [modelGroups, setModelGroups] = useState<ModelGroups | null>(null);
   const [defaultModel, setDefaultModel] = useState<string>("");
   const [defaultModelSaved, setDefaultModelSaved] = useState(false);
+  const [defaultCustomModel, setDefaultCustomModel] = useState("");
 
   // STT engine
   const [sttEngine, setSttEngine] = useState<"whisper" | "moonshine" | "groq" | "deepgram">("whisper");
@@ -127,6 +131,17 @@ export default function SettingsPage() {
   const [geminiStatus, setGeminiStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   const [geminiSaving, setGeminiSaving] = useState(false);
 
+  // Key & model tester state
+  const [testProvider, setTestProvider] = useState<"gemini" | "deepseek">("gemini");
+  const [testModel, setTestModel] = useState("gemini-2.5-flash");
+  const [testCustomModel, setTestCustomModel] = useState("");
+  const [testKey, setTestKey] = useState("");
+  const [testKeyVisible, setTestKeyVisible] = useState(false);
+  const [testStatus, setTestStatus] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [geminiTesting, setGeminiTesting] = useState(false);
+  const [dsTesting, setDsTesting] = useState(false);
+
   // Cartesia key state
   const [deepgramKey, setDeepgramKey] = useState("");
   const [deepgramKeyVisible, setDeepgramKeyVisible] = useState(false);
@@ -161,7 +176,15 @@ export default function SettingsPage() {
       setModelGroups(mg);
       const saved = localStorage.getItem("selectedModel");
       const allModels = [...mg.ollama, ...mg.deepseek, ...mg.gemini];
-      setDefaultModel(saved && allModels.includes(saved) ? saved : mg.default);
+      if (saved && allModels.includes(saved)) {
+        setDefaultModel(saved);
+      } else if (saved) {
+        // A previously-saved custom model that isn't in the known lists.
+        setDefaultModel(CUSTOM_MODEL);
+        setDefaultCustomModel(saved);
+      } else {
+        setDefaultModel(mg.default);
+      }
     }).catch(() => {});
     api.listTopics().then(setTopics).catch(() => {});
   }, []);
@@ -276,6 +299,57 @@ export default function SettingsPage() {
       setGeminiStatus({ ok: false, msg: err instanceof Error ? err.message : String(err) });
     } finally {
       setGeminiSaving(false);
+    }
+  }
+
+  // ── Test the saved Gemini key against the first available Gemini model ──────
+  async function handleTestGeminiKey() {
+    const model = modelGroups?.gemini?.[0] ?? "gemini-2.5-flash";
+    setGeminiTesting(true);
+    setGeminiStatus(null);
+    try {
+      const res = await api.testLLM("gemini", model);
+      setGeminiStatus({ ok: res.ok, msg: res.message });
+      setHealth((h) => h ? { ...h, gemini_configured: res.ok || h.gemini_configured } : h);
+    } catch (err: unknown) {
+      setGeminiStatus({ ok: false, msg: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setGeminiTesting(false);
+    }
+  }
+
+  // ── Test the saved DeepSeek key against the first available DeepSeek model ──
+  async function handleTestDeepSeekKey() {
+    const model = modelGroups?.deepseek?.[0] ?? "deepseek-chat";
+    setDsTesting(true);
+    setDsStatus(null);
+    try {
+      const res = await api.testLLM("deepseek", model);
+      setDsStatus({ ok: res.ok, msg: res.message });
+      setHealth((h) => h ? { ...h, deepseek_configured: res.ok || h.deepseek_configured } : h);
+    } catch (err: unknown) {
+      setDsStatus({ ok: false, msg: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setDsTesting(false);
+    }
+  }
+
+  // ── Run a live key + model test from the tester card ────────────────────────
+  async function handleRunTest() {
+    const effectiveModel = (testModel === CUSTOM_MODEL ? testCustomModel.trim() : testModel);
+    if (!effectiveModel) {
+      setTestStatus({ ok: false, msg: "Enter a custom model name to test." });
+      return;
+    }
+    setTesting(true);
+    setTestStatus(null);
+    try {
+      const res = await api.testLLM(testProvider, effectiveModel, testKey.trim() || undefined);
+      setTestStatus({ ok: res.ok, msg: res.message });
+    } catch (err: unknown) {
+      setTestStatus({ ok: false, msg: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -462,13 +536,14 @@ export default function SettingsPage() {
   }
 
   function handleSaveDefaultModel() {
-    if (!defaultModel) return;
-    localStorage.setItem("selectedModel", defaultModel);
+    const effectiveModel = defaultModel === CUSTOM_MODEL ? defaultCustomModel.trim() : defaultModel;
+    if (!effectiveModel) return;
+    localStorage.setItem("selectedModel", effectiveModel);
     setDefaultModelSaved(true);
     setTimeout(() => setDefaultModelSaved(false), 2500);
     // Also persist to backend if it's an Ollama model
-    if (modelGroups?.ollama.includes(defaultModel)) {
-      api.saveOllamaModel(defaultModel).catch(() => {});
+    if (modelGroups?.ollama.includes(effectiveModel)) {
+      api.saveOllamaModel(effectiveModel).catch(() => {});
     }
   }
 
@@ -514,14 +589,14 @@ export default function SettingsPage() {
           { label: "Settings" },
         ]}
       />
-      <div className="min-h-screen bg-gray-950 text-white p-6">
+      <div className="min-h-screen bg-surface-0 text-white p-6">
         <div className="max-w-2xl mx-auto">
           <h1 className="text-xl font-bold mb-6">Settings</h1>
 
 
         {/* System status */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5">
-          <h2 className="text-sm font-semibold text-gray-300 mb-4">System Status</h2>
+        <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-5">
+          <h2 className="text-sm font-semibold text-text-primary mb-4">System Status</h2>
           {health ? (
             <div className="space-y-2 text-sm">
               <Row label="Ollama" value={health.ollama_available ? "✅ Connected" : "❌ Not running"} />
@@ -535,16 +610,16 @@ export default function SettingsPage() {
               <Row label="STT engine" value={{ whisper: "Whisper (local)", moonshine: "Moonshine (local, M2)", groq: "Groq Whisper (cloud)", deepgram: "Deepgram Nova (cloud)" }[health.stt_engine] ?? health.stt_engine} />
             </div>
           ) : (
-            <p className="text-gray-500 text-sm">Checking backend...</p>
+            <p className="text-text-muted text-sm">Checking backend...</p>
           )}
         </div>
 
         {/* Default AI Model */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5">
-          <h2 className="text-sm font-semibold text-gray-300 mb-1 flex items-center gap-2">
+        <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-5">
+          <h2 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2">
             <Brain size={15} /> Default AI Model
           </h2>
-          <p className="text-xs text-gray-500 mb-4">
+          <p className="text-xs text-text-muted mb-4">
             Pre-selects this model on the dashboard. You can still override it per session.
           </p>
 
@@ -555,7 +630,7 @@ export default function SettingsPage() {
                   <select
                     value={defaultModel}
                     onChange={(e) => setDefaultModel(e.target.value)}
-                    className="w-full appearance-none bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 pr-8 text-sm"
+                    className="w-full appearance-none bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 pr-8 text-sm"
                   >
                     {modelGroups.ollama.length ? (
                       <optgroup label="Ollama — installed locally">
@@ -580,32 +655,153 @@ export default function SettingsPage() {
                         </option>
                       ))}
                     </optgroup>
+                    <optgroup label="Custom">
+                      <option value={CUSTOM_MODEL}>＋ Custom model…</option>
+                    </optgroup>
                   </select>
-                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none" />
                 </div>
                 <button
                   onClick={handleSaveDefaultModel}
-                  disabled={!defaultModel}
-                  className="px-5 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm font-medium"
+                  disabled={!defaultModel || (defaultModel === CUSTOM_MODEL && !defaultCustomModel.trim())}
+                  className="px-5 py-2.5 bg-accent hover:bg-accent-bright disabled:opacity-40 rounded-xl text-sm font-medium"
                 >
                   {defaultModelSaved ? "✓ Saved" : "Set default"}
                 </button>
               </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Current default: <span className="text-gray-300 font-mono">{localStorage.getItem("selectedModel") ?? modelGroups.default}</span>
+
+              {/* Custom model name (shown when "Custom…" is selected) */}
+              {defaultModel === CUSTOM_MODEL && (
+                <div className="mt-2">
+                  <label className="text-xs text-text-secondary font-medium block mb-1">Custom model name</label>
+                  <input
+                    type="text"
+                    value={defaultCustomModel}
+                    onChange={(e) => setDefaultCustomModel(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSaveDefaultModel()}
+                    placeholder="e.g. gemini-2.5-pro, deepseek-reasoner, or qwen2.5:14b"
+                    className="w-full bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm font-mono placeholder:text-text-muted focus:outline-none focus:border-accent/40"
+                  />
+                </div>
+              )}
+              <p className="text-xs text-text-muted mt-2">
+                Current default: <span className="text-text-primary font-mono">{localStorage.getItem("selectedModel") ?? modelGroups.default}</span>
               </p>
             </>
           ) : (
-            <p className="text-gray-500 text-sm">Loading models...</p>
+            <p className="text-text-muted text-sm">Loading models...</p>
+          )}
+        </div>
+
+        {/* Test API Key & Model */}
+        <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-5">
+          <h2 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2">
+            <PlugZap size={15} /> Test API Key &amp; Model
+          </h2>
+          <p className="text-xs text-text-muted mb-4">
+            Send a tiny live request to confirm a key works <span className="text-text-primary">and</span> that the
+            selected model is currently available. Leave the key blank to test your saved key, or paste a new
+            one to check it <span className="text-text-primary">before</span> saving.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+            {/* Provider */}
+            <div>
+              <label className="text-xs text-text-secondary font-medium block mb-1">Provider</label>
+              <select
+                value={testProvider}
+                onChange={(e) => {
+                  const p = e.target.value as "gemini" | "deepseek";
+                  setTestProvider(p);
+                  const first = p === "gemini"
+                    ? (modelGroups?.gemini?.[0] ?? "gemini-2.5-flash")
+                    : (modelGroups?.deepseek?.[0] ?? "deepseek-chat");
+                  setTestModel(first);
+                  setTestStatus(null);
+                }}
+                className="w-full bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm"
+              >
+                <option value="gemini">Google Gemini</option>
+                <option value="deepseek">DeepSeek</option>
+              </select>
+            </div>
+
+            {/* Model */}
+            <div>
+              <label className="text-xs text-text-secondary font-medium block mb-1">Model</label>
+              <select
+                value={testModel}
+                onChange={(e) => { setTestModel(e.target.value); setTestStatus(null); }}
+                className="w-full bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm"
+              >
+                {((testProvider === "gemini" ? modelGroups?.gemini : modelGroups?.deepseek) ?? []).map((m) => (
+                  <option key={m} value={m}>
+                    {(testProvider === "gemini" ? GEMINI_LABELS : DEEPSEEK_LABELS)[m] ?? m}
+                  </option>
+                ))}
+                <option value={CUSTOM_MODEL}>＋ Custom model…</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Custom model name (shown when "Custom…" is selected) */}
+          {testModel === CUSTOM_MODEL && (
+            <div className="mb-3">
+              <label className="text-xs text-text-secondary font-medium block mb-1">Custom model name</label>
+              <input
+                type="text"
+                value={testCustomModel}
+                onChange={(e) => setTestCustomModel(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleRunTest()}
+                placeholder="e.g. gemini-2.5-pro or models/gemini-3-flash-preview"
+                className="w-full bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm font-mono placeholder:text-text-muted focus:outline-none focus:border-accent/40"
+              />
+            </div>
+          )}
+
+          {/* Optional key */}
+          <div className="relative mb-3">
+            <input
+              type={testKeyVisible ? "text" : "password"}
+              value={testKey}
+              onChange={(e) => setTestKey(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleRunTest()}
+              placeholder="(optional) paste a key to test before saving…"
+              className="w-full bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 pr-10 text-sm font-mono placeholder:text-text-muted focus:outline-none focus:border-accent/40"
+            />
+            <button
+              onClick={() => setTestKeyVisible((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+              aria-label="Toggle key visibility"
+            >
+              {testKeyVisible ? <EyeOff size={15} /> : <Eye size={15} />}
+            </button>
+          </div>
+
+          <button
+            onClick={handleRunTest}
+            disabled={testing}
+            className="flex items-center gap-2 px-5 py-2.5 bg-status-ok hover:brightness-110 disabled:opacity-40 rounded-xl text-sm font-medium"
+          >
+            <PlugZap size={15} /> {testing ? "Testing..." : "Run test"}
+          </button>
+
+          {testStatus && (
+            <div className={`flex items-start gap-2 mt-3 p-3 rounded-xl text-sm ${
+              testStatus.ok ? "bg-status-ok/10 text-status-ok" : "bg-status-error/12 text-status-error"
+            }`}>
+              {testStatus.ok ? <CheckCircle size={15} className="mt-0.5 shrink-0" /> : <AlertCircle size={15} className="mt-0.5 shrink-0" />}
+              {testStatus.msg}
+            </div>
           )}
         </div>
 
         {/* TTS engine */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5">
-          <h2 className="text-sm font-semibold text-gray-300 mb-1 flex items-center gap-2">
+        <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-5">
+          <h2 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2">
             <Volume2 size={15} /> Interviewer Voice
           </h2>
-          <p className="text-xs text-gray-500 mb-4">
+          <p className="text-xs text-text-muted mb-4">
             Choose your interviewer&apos;s voice.
             <InfoTip text="M2 recommendations: Piper (50MB, fastest local) or Apple TTS (zero overhead). Kokoro works but takes ~1s warmup on M2. Cloud options (Cartesia/Deepgram) need an internet connection but have no local overhead." />
           </p>
@@ -614,7 +810,7 @@ export default function SettingsPage() {
             <select
               value={ttsEngine}
               onChange={(event) => setTtsEngine(event.target.value as "kokoro" | "apple" | "cartesia" | "piper" | "deepgram")}
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm"
+              className="flex-1 bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm"
             >
               <option value="kokoro">Kokoro-82M — natural voice (local, ~300MB)</option>
               <option value="piper">Piper ONNX — lightweight voice (local, ~50MB) ✅ M2</option>
@@ -625,7 +821,7 @@ export default function SettingsPage() {
             <button
               onClick={handleSaveTtsEngine}
               disabled={ttsSaving || ttsEngine === health?.tts_engine}
-              className="px-5 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm font-medium"
+              className="px-5 py-2.5 bg-accent hover:bg-accent-bright disabled:opacity-40 rounded-xl text-sm font-medium"
             >
               {ttsSaving ? "Saving..." : "Use voice"}
             </button>
@@ -633,7 +829,7 @@ export default function SettingsPage() {
 
           {ttsStatus && (
             <div className={`flex items-start gap-2 mt-3 p-3 rounded-xl text-sm ${
-              ttsStatus.ok ? "bg-green-900/40 text-green-300" : "bg-red-900/40 text-red-300"
+              ttsStatus.ok ? "bg-status-ok/10 text-status-ok" : "bg-status-error/12 text-status-error"
             }`}>
               {ttsStatus.ok ? <CheckCircle size={15} className="mt-0.5 shrink-0" /> : <AlertCircle size={15} className="mt-0.5 shrink-0" />}
               {ttsStatus.msg}
@@ -642,19 +838,19 @@ export default function SettingsPage() {
         </div>
 
         {/* Speech Recognition (STT) */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5">
-          <h2 className="text-sm font-semibold text-gray-300 mb-1 flex items-center gap-2">
+        <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-5">
+          <h2 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2">
             <Mic size={15} /> Speech Recognition
           </h2>
-          <p className="text-xs text-gray-500 mb-4">
-            <span className="text-green-400 font-medium">Recommended: Whisper (local)</span> — free, offline, CoreML on Apple Silicon. Use Deepgram for cloud accuracy on noisy environments (uses your Deepgram key).
+          <p className="text-xs text-text-muted mb-4">
+            <span className="text-status-ok font-medium">Recommended: Whisper (local)</span> — free, offline, CoreML on Apple Silicon. Use Deepgram for cloud accuracy on noisy environments (uses your Deepgram key).
           </p>
 
           <div className="flex gap-2">
             <select
               value={sttEngine}
               onChange={(e) => setSttEngine(e.target.value as "whisper" | "moonshine" | "groq" | "deepgram")}
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm"
+              className="flex-1 bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm"
             >
               <optgroup label="Local — free, offline">
                 <option value="whisper">Whisper — large-v3-turbo default (M4) / small or base (M2)</option>
@@ -668,7 +864,7 @@ export default function SettingsPage() {
             <button
               onClick={handleSaveSttEngine}
               disabled={sttSaving || sttEngine === health?.stt_engine}
-              className="px-5 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm font-medium"
+              className="px-5 py-2.5 bg-accent hover:bg-accent-bright disabled:opacity-40 rounded-xl text-sm font-medium"
             >
               {sttSaving ? "Saving..." : "Use engine"}
             </button>
@@ -676,7 +872,7 @@ export default function SettingsPage() {
 
           {sttStatus && (
             <div className={`flex items-start gap-2 mt-3 p-3 rounded-xl text-sm ${
-              sttStatus.ok ? "bg-green-900/40 text-green-300" : "bg-red-900/40 text-red-300"
+              sttStatus.ok ? "bg-status-ok/10 text-status-ok" : "bg-status-error/12 text-status-error"
             }`}>
               {sttStatus.ok ? <CheckCircle size={15} className="mt-0.5 shrink-0" /> : <AlertCircle size={15} className="mt-0.5 shrink-0" />}
               {sttStatus.msg}
@@ -685,8 +881,8 @@ export default function SettingsPage() {
 
           {/* Whisper model size picker */}
           {sttEngine === "whisper" && (
-            <div className="mt-4 pt-4 border-t border-gray-800">
-              <p className="text-xs text-gray-400 mb-2 font-medium flex items-center">
+            <div className="mt-4 pt-4 border-t border-border-subtle">
+              <p className="text-xs text-text-secondary mb-2 font-medium flex items-center">
                 Whisper Model Size
                 <InfoTip text="Larger models are more accurate but use more RAM and take longer to load. All sizes use CoreML on Apple Silicon for fast inference." />
               </p>
@@ -694,11 +890,10 @@ export default function SettingsPage() {
                 <select
                   value={whisperModel}
                   onChange={(e) => setWhisperModel(e.target.value)}
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm"
+                  className="flex-1 bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm"
                 >
                   <option value="tiny">tiny — ~75MB, fastest, lower accuracy</option>
-                  <option value="base">base — ~150MB, good for M2 lightweight
-                    <InfoTip text="✅ M2 compatible" /></option>
+                  <option value="base">base — ~150MB, good for M2 lightweight ✅ M2</option>
                   <option value="small">small — ~250MB, balanced speed/accuracy ✅ M2</option>
                   <option value="medium">medium — ~750MB, high accuracy</option>
                   <option value="large-v3">large-v3 — ~1.5GB, best accuracy</option>
@@ -707,18 +902,18 @@ export default function SettingsPage() {
                 <button
                   onClick={handleSaveWhisperModel}
                   disabled={whisperModelSaving || whisperModel === health?.whisper_model}
-                  className="px-5 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm font-medium"
+                  className="px-5 py-2.5 bg-accent hover:bg-accent-bright disabled:opacity-40 rounded-xl text-sm font-medium"
                 >
                   {whisperModelSaving ? "Saving..." : "Use model"}
                 </button>
               </div>
               {/* M2 recommendation callout */}
-              <div className="mt-2 p-2.5 bg-blue-950/50 border border-blue-900/50 rounded-lg text-xs text-blue-300">
-                <span className="font-medium">M2 recommendation:</span> use <code className="bg-blue-900/50 px-1 rounded">small</code> (250MB, fast + accurate) or <code className="bg-blue-900/50 px-1 rounded">base</code> (150MB, lightest). M4 can handle <code className="bg-blue-900/50 px-1 rounded">large-v3-turbo</code> comfortably.
+              <div className="mt-2 p-2.5 bg-accent/50 border border-accent/25 rounded-lg text-xs text-accent">
+                <span className="font-medium">M2 recommendation:</span> use <code className="bg-accent/50 px-1 rounded">small</code> (250MB, fast + accurate) or <code className="bg-accent/50 px-1 rounded">base</code> (150MB, lightest). M4 can handle <code className="bg-accent/50 px-1 rounded">large-v3-turbo</code> comfortably.
               </div>
               {whisperModelStatus && (
                 <div className={`flex items-start gap-2 mt-2 p-2 rounded-lg text-xs ${
-                  whisperModelStatus.ok ? "bg-green-900/40 text-green-300" : "bg-red-900/40 text-red-300"
+                  whisperModelStatus.ok ? "bg-status-ok/10 text-status-ok" : "bg-status-error/12 text-status-error"
                 }`}>
                   {whisperModelStatus.ok ? <CheckCircle size={13} className="mt-0.5 shrink-0" /> : <AlertCircle size={13} className="mt-0.5 shrink-0" />}
                   {whisperModelStatus.msg}
@@ -728,8 +923,8 @@ export default function SettingsPage() {
           )}
 
           {sttEngine === "moonshine" && (
-            <div className="mt-4 pt-4 border-t border-gray-800">
-              <p className="text-xs text-gray-400 mb-2 font-medium flex items-center">
+            <div className="mt-4 pt-4 border-t border-border-subtle">
+              <p className="text-xs text-text-secondary mb-2 font-medium flex items-center">
                 Moonshine Model
                 <InfoTip text="Moonshine tiny (~25 MB) is faster than Whisper base on Apple Silicon with similar accuracy on conversational speech. Install: pip install moonshine-onnx" />
               </p>
@@ -737,7 +932,7 @@ export default function SettingsPage() {
                 <select
                   value={moonshineModel}
                   onChange={(e) => setMoonshineModel(e.target.value as "moonshine/tiny" | "moonshine/base")}
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm"
+                  className="flex-1 bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm"
                 >
                   <option value="moonshine/tiny">tiny — ~25 MB, fastest ✅ M2 recommended</option>
                   <option value="moonshine/base">base — ~75 MB, more accurate</option>
@@ -745,16 +940,16 @@ export default function SettingsPage() {
                 <button
                   onClick={handleSaveMoonshineModel}
                   disabled={moonshineModelSaving || moonshineModel === health?.moonshine_model}
-                  className="px-5 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm font-medium"
+                  className="px-5 py-2.5 bg-accent hover:bg-accent-bright disabled:opacity-40 rounded-xl text-sm font-medium"
                 >
                   {moonshineModelSaving ? "Saving..." : "Use model"}
                 </button>
               </div>
-              <div className="mt-2 p-2.5 bg-blue-950/50 border border-blue-900/50 rounded-lg text-xs text-blue-300">
-                Install first: <code className="bg-blue-900/50 px-1 rounded">pip install moonshine-onnx</code>
+              <div className="mt-2 p-2.5 bg-accent/50 border border-accent/25 rounded-lg text-xs text-accent">
+                Install first: <code className="bg-accent/50 px-1 rounded">pip install moonshine-onnx</code>
               </div>
               {moonshineModelStatus && (
-                <div className={`flex items-start gap-2 mt-2 p-2 rounded-lg text-xs ${moonshineModelStatus.ok ? "bg-green-900/40 text-green-300" : "bg-red-900/40 text-red-300"}`}>
+                <div className={`flex items-start gap-2 mt-2 p-2 rounded-lg text-xs ${moonshineModelStatus.ok ? "bg-status-ok/10 text-status-ok" : "bg-status-error/12 text-status-error"}`}>
                   {moonshineModelStatus.ok ? <CheckCircle size={13} className="mt-0.5 shrink-0" /> : <AlertCircle size={13} className="mt-0.5 shrink-0" />}
                   {moonshineModelStatus.msg}
                 </div>
@@ -763,8 +958,8 @@ export default function SettingsPage() {
           )}
 
           {sttEngine === "groq" && (
-            <div className="mt-4 pt-4 border-t border-gray-800">
-              <p className="text-xs text-gray-400 mb-2 font-medium flex items-center">
+            <div className="mt-4 pt-4 border-t border-border-subtle">
+              <p className="text-xs text-text-secondary mb-2 font-medium flex items-center">
                 Groq Whisper Model
                 <InfoTip text="Groq runs Whisper at ~300× realtime. Free tier: ~18,000 seconds/month. Get a free key at console.groq.com" />
               </p>
@@ -772,7 +967,7 @@ export default function SettingsPage() {
                 <select
                   value={groqSttModel}
                   onChange={(e) => setGroqSttModel(e.target.value)}
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm"
+                  className="flex-1 bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm"
                 >
                   <option value="whisper-large-v3-turbo">whisper-large-v3-turbo — best quality (recommended)</option>
                   <option value="whisper-large-v3">whisper-large-v3 — most accurate, slower</option>
@@ -781,13 +976,13 @@ export default function SettingsPage() {
                 <button
                   onClick={handleSaveGroqSttModel}
                   disabled={groqSttModelSaving || groqSttModel === health?.groq_stt_model}
-                  className="px-5 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm font-medium"
+                  className="px-5 py-2.5 bg-accent hover:bg-accent-bright disabled:opacity-40 rounded-xl text-sm font-medium"
                 >
                   {groqSttModelSaving ? "Saving..." : "Use model"}
                 </button>
               </div>
               {groqSttModelStatus && (
-                <div className={`flex items-start gap-2 mt-2 p-2 rounded-lg text-xs ${groqSttModelStatus.ok ? "bg-green-900/40 text-green-300" : "bg-red-900/40 text-red-300"}`}>
+                <div className={`flex items-start gap-2 mt-2 p-2 rounded-lg text-xs ${groqSttModelStatus.ok ? "bg-status-ok/10 text-status-ok" : "bg-status-error/12 text-status-error"}`}>
                   {groqSttModelStatus.ok ? <CheckCircle size={13} className="mt-0.5 shrink-0" /> : <AlertCircle size={13} className="mt-0.5 shrink-0" />}
                   {groqSttModelStatus.msg}
                 </div>
@@ -796,13 +991,13 @@ export default function SettingsPage() {
           )}
 
           {sttEngine === "deepgram" && (
-            <div className="mt-4 pt-4 border-t border-gray-800">
-              <p className="text-xs text-gray-400 mb-2 font-medium">Deepgram STT Model</p>
+            <div className="mt-4 pt-4 border-t border-border-subtle">
+              <p className="text-xs text-text-secondary mb-2 font-medium">Deepgram STT Model</p>
               <div className="flex gap-2">
                 <select
                   value={deepgramSttModel}
                   onChange={(e) => setDeepgramSttModel(e.target.value)}
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm"
+                  className="flex-1 bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm"
                 >
                   <option value="nova-3">nova-3 — most accurate (recommended)</option>
                   <option value="nova-2">nova-2 — slightly faster</option>
@@ -811,14 +1006,14 @@ export default function SettingsPage() {
                 <button
                   onClick={handleSaveDeepgramSttModel}
                   disabled={deepgramSttModelSaving || deepgramSttModel === health?.deepgram_stt_model}
-                  className="px-5 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm font-medium"
+                  className="px-5 py-2.5 bg-accent hover:bg-accent-bright disabled:opacity-40 rounded-xl text-sm font-medium"
                 >
                   {deepgramSttModelSaving ? "Saving..." : "Use model"}
                 </button>
               </div>
               {deepgramSttModelStatus && (
                 <div className={`flex items-start gap-2 mt-2 p-2 rounded-lg text-xs ${
-                  deepgramSttModelStatus.ok ? "bg-green-900/40 text-green-300" : "bg-red-900/40 text-red-300"
+                  deepgramSttModelStatus.ok ? "bg-status-ok/10 text-status-ok" : "bg-status-error/12 text-status-error"
                 }`}>
                   {deepgramSttModelStatus.ok ? <CheckCircle size={13} className="mt-0.5 shrink-0" /> : <AlertCircle size={13} className="mt-0.5 shrink-0" />}
                   {deepgramSttModelStatus.msg}
@@ -829,25 +1024,32 @@ export default function SettingsPage() {
         </div>
 
         {/* DeepSeek API key */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5">
-          <h2 className="text-sm font-semibold text-gray-300 mb-1 flex items-center gap-2">
+        <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-5">
+          <h2 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2">
             <Key size={15} /> DeepSeek API Key
           </h2>
-          <p className="text-xs text-gray-500 mb-4">
-            Required to use <span className="text-gray-300">deepseek-chat</span> (V3) or <span className="text-gray-300">deepseek-reasoner</span> (R1).
-            Get your key at <span className="text-blue-400">platform.deepseek.com</span>.
-            The key is stored in <code className="bg-gray-800 px-1 rounded">backend/.env</code> on your machine only.
+          <p className="text-xs text-text-muted mb-4">
+            Required to use <span className="text-text-primary">deepseek-chat</span> (V3) or <span className="text-text-primary">deepseek-reasoner</span> (R1).
+            Get your key at <span className="text-accent">platform.deepseek.com</span>.
+            The key is stored in <code className="bg-surface-2 px-1 rounded">backend/.env</code> on your machine only.
           </p>
 
           {health?.deepseek_configured ? (
             <div className="flex items-center gap-3">
-              <div className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-400 font-mono">
+              <div className="flex-1 bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm text-text-secondary font-mono">
                 sk-••••••••••••••••••••••••
               </div>
               <button
+                onClick={handleTestDeepSeekKey}
+                disabled={dsTesting}
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-status-ok/10 hover:bg-status-ok/10 border border-status-ok/30 rounded-xl text-status-ok text-sm disabled:opacity-50"
+              >
+                <PlugZap size={14} /> {dsTesting ? "Testing..." : "Test"}
+              </button>
+              <button
                 onClick={handleRemoveKey}
                 disabled={dsSaving}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-red-900/50 hover:bg-red-900 border border-red-800 rounded-xl text-red-300 text-sm disabled:opacity-50"
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-status-error/12 hover:bg-status-error/12 border border-status-error/30 rounded-xl text-status-error text-sm disabled:opacity-50"
               >
                 <Trash2 size={14} /> Remove
               </button>
@@ -861,11 +1063,11 @@ export default function SettingsPage() {
                   onChange={(e) => setDsKey(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSaveKey()}
                   placeholder="sk-..."
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 pr-10 text-sm font-mono placeholder-gray-600 focus:outline-none focus:border-blue-600"
+                  className="w-full bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 pr-10 text-sm font-mono placeholder:text-text-muted focus:outline-none focus:border-accent/40"
                 />
                 <button
                   onClick={() => setDsKeyVisible((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
                 >
                   {dsKeyVisible ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
@@ -873,7 +1075,7 @@ export default function SettingsPage() {
               <button
                 onClick={handleSaveKey}
                 disabled={dsSaving || !dsKey.trim()}
-                className="px-5 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm font-medium"
+                className="px-5 py-2.5 bg-accent hover:bg-accent-bright disabled:opacity-40 rounded-xl text-sm font-medium"
               >
                 {dsSaving ? "Saving..." : "Save"}
               </button>
@@ -882,7 +1084,7 @@ export default function SettingsPage() {
 
           {dsStatus && (
             <div className={`flex items-start gap-2 mt-3 p-3 rounded-xl text-sm ${
-              dsStatus.ok ? "bg-green-900/40 text-green-300" : "bg-red-900/40 text-red-300"
+              dsStatus.ok ? "bg-status-ok/10 text-status-ok" : "bg-status-error/12 text-status-error"
             }`}>
               {dsStatus.ok ? <CheckCircle size={15} className="mt-0.5 shrink-0" /> : <AlertCircle size={15} className="mt-0.5 shrink-0" />}
               {dsStatus.msg}
@@ -891,25 +1093,25 @@ export default function SettingsPage() {
         </div>
 
         {/* Groq API key */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5">
-          <h2 className="text-sm font-semibold text-gray-300 mb-1 flex items-center gap-2">
+        <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-5">
+          <h2 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2">
             <Key size={15} /> Groq API Key
-            <span className="ml-1 px-1.5 py-0.5 bg-green-900 text-green-300 rounded text-xs">STT</span>
+            <span className="ml-1 px-1.5 py-0.5 bg-status-ok/10 text-status-ok rounded text-xs">STT</span>
           </h2>
-          <p className="text-xs text-gray-500 mb-4">
-            Powers <span className="text-gray-300">Groq Whisper</span> STT — runs Whisper at ~300× realtime with a{" "}
-            <span className="text-green-400">free tier (~18,000 sec/month)</span>.
-            Get your key at <span className="text-blue-400">console.groq.com</span>.
-            Stored in <code className="bg-gray-800 px-1 rounded">backend/.env</code> only.
+          <p className="text-xs text-text-muted mb-4">
+            Powers <span className="text-text-primary">Groq Whisper</span> STT — runs Whisper at ~300× realtime with a{" "}
+            <span className="text-status-ok">free tier (~18,000 sec/month)</span>.
+            Get your key at <span className="text-accent">console.groq.com</span>.
+            Stored in <code className="bg-surface-2 px-1 rounded">backend/.env</code> only.
           </p>
 
           {health?.groq_configured ? (
             <div className="flex items-center gap-3">
-              <div className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-400 font-mono">
+              <div className="flex-1 bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm text-text-secondary font-mono">
                 gsk_••••••••••••••••••••••••
               </div>
               <button onClick={handleRemoveGroqKey} disabled={groqSaving}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-red-900/50 hover:bg-red-900 border border-red-800 rounded-xl text-red-300 text-sm disabled:opacity-50">
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-status-error/12 hover:bg-status-error/12 border border-status-error/30 rounded-xl text-status-error text-sm disabled:opacity-50">
                 <Trash2 size={14} /> Remove
               </button>
             </div>
@@ -922,22 +1124,22 @@ export default function SettingsPage() {
                   onChange={(e) => setGroqKey(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSaveGroqKey()}
                   placeholder="gsk_..."
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 pr-10 text-sm font-mono placeholder-gray-600 focus:outline-none focus:border-blue-600"
+                  className="w-full bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 pr-10 text-sm font-mono placeholder:text-text-muted focus:outline-none focus:border-accent/40"
                 />
                 <button onClick={() => setGroqKeyVisible((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary">
                   {groqKeyVisible ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
               <button onClick={handleSaveGroqKey} disabled={groqSaving || !groqKey.trim()}
-                className="px-5 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm font-medium">
+                className="px-5 py-2.5 bg-accent hover:bg-accent-bright disabled:opacity-40 rounded-xl text-sm font-medium">
                 {groqSaving ? "Saving..." : "Save"}
               </button>
             </div>
           )}
 
           {groqStatus && (
-            <div className={`flex items-start gap-2 mt-3 p-3 rounded-xl text-sm ${groqStatus.ok ? "bg-green-900/40 text-green-300" : "bg-red-900/40 text-red-300"}`}>
+            <div className={`flex items-start gap-2 mt-3 p-3 rounded-xl text-sm ${groqStatus.ok ? "bg-status-ok/10 text-status-ok" : "bg-status-error/12 text-status-error"}`}>
               {groqStatus.ok ? <CheckCircle size={15} className="mt-0.5 shrink-0" /> : <AlertCircle size={15} className="mt-0.5 shrink-0" />}
               {groqStatus.msg}
             </div>
@@ -945,26 +1147,33 @@ export default function SettingsPage() {
         </div>
 
         {/* Gemini API key */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5">
-          <h2 className="text-sm font-semibold text-gray-300 mb-1 flex items-center gap-2">
+        <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-5">
+          <h2 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2">
             <Key size={15} /> Google Gemini API Key
           </h2>
-          <p className="text-xs text-gray-500 mb-4">
-            Required for <span className="text-gray-300">gemini-2.0-flash</span> and <span className="text-gray-300">gemini-1.5-flash</span> — both have a{" "}
-            <span className="text-green-400">free tier</span> (15 req/min, 1,500 req/day).
-            Get your key at <span className="text-blue-400">aistudio.google.com</span>.
-            Stored in <code className="bg-gray-800 px-1 rounded">backend/.env</code> only.
+          <p className="text-xs text-text-muted mb-4">
+            Required for <span className="text-text-primary">gemini-2.5-flash</span> and <span className="text-text-primary">gemini-flash-lite-latest</span> — both have a{" "}
+            <span className="text-status-ok">free tier</span> (15 req/min, 1,500 req/day).
+            Get your key at <span className="text-accent">aistudio.google.com</span>.
+            Stored in <code className="bg-surface-2 px-1 rounded">backend/.env</code> only.
           </p>
 
           {health?.gemini_configured ? (
             <div className="flex items-center gap-3">
-              <div className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-400 font-mono">
+              <div className="flex-1 bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm text-text-secondary font-mono">
                 AIza••••••••••••••••••••••••
               </div>
               <button
+                onClick={handleTestGeminiKey}
+                disabled={geminiTesting}
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-status-ok/10 hover:bg-status-ok/10 border border-status-ok/30 rounded-xl text-status-ok text-sm disabled:opacity-50"
+              >
+                <PlugZap size={14} /> {geminiTesting ? "Testing..." : "Test"}
+              </button>
+              <button
                 onClick={handleRemoveGeminiKey}
                 disabled={geminiSaving}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-red-900/50 hover:bg-red-900 border border-red-800 rounded-xl text-red-300 text-sm disabled:opacity-50"
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-status-error/12 hover:bg-status-error/12 border border-status-error/30 rounded-xl text-status-error text-sm disabled:opacity-50"
               >
                 <Trash2 size={14} /> Remove
               </button>
@@ -978,11 +1187,11 @@ export default function SettingsPage() {
                   onChange={(e) => setGeminiKey(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSaveGeminiKey()}
                   placeholder="AIza..."
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 pr-10 text-sm font-mono placeholder-gray-600 focus:outline-none focus:border-blue-600"
+                  className="w-full bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 pr-10 text-sm font-mono placeholder:text-text-muted focus:outline-none focus:border-accent/40"
                 />
                 <button
                   onClick={() => setGeminiKeyVisible((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
                 >
                   {geminiKeyVisible ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
@@ -990,7 +1199,7 @@ export default function SettingsPage() {
               <button
                 onClick={handleSaveGeminiKey}
                 disabled={geminiSaving || !geminiKey.trim()}
-                className="px-5 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm font-medium"
+                className="px-5 py-2.5 bg-accent hover:bg-accent-bright disabled:opacity-40 rounded-xl text-sm font-medium"
               >
                 {geminiSaving ? "Saving..." : "Save"}
               </button>
@@ -999,7 +1208,7 @@ export default function SettingsPage() {
 
           {geminiStatus && (
             <div className={`flex items-start gap-2 mt-3 p-3 rounded-xl text-sm ${
-              geminiStatus.ok ? "bg-green-900/40 text-green-300" : "bg-red-900/40 text-red-300"
+              geminiStatus.ok ? "bg-status-ok/10 text-status-ok" : "bg-status-error/12 text-status-error"
             }`}>
               {geminiStatus.ok ? <CheckCircle size={15} className="mt-0.5 shrink-0" /> : <AlertCircle size={15} className="mt-0.5 shrink-0" />}
               {geminiStatus.msg}
@@ -1008,26 +1217,26 @@ export default function SettingsPage() {
         </div>
 
         {/* Cartesia API key */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5">
-          <h2 className="text-sm font-semibold text-gray-300 mb-1 flex items-center gap-2">
+        <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-5">
+          <h2 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2">
             <Key size={15} /> Cartesia API Key
           </h2>
-          <p className="text-xs text-gray-500 mb-4">
-            Powers the <span className="text-gray-300">Cartesia Sonic-2</span> voice engine — ~80ms latency with a{" "}
-            <span className="text-green-400">free tier</span> (~500K chars/month).
-            Get your key at <span className="text-blue-400">cartesia.ai</span>.
-            Stored in <code className="bg-gray-800 px-1 rounded">backend/.env</code> only.
+          <p className="text-xs text-text-muted mb-4">
+            Powers the <span className="text-text-primary">Cartesia Sonic-2</span> voice engine — ~80ms latency with a{" "}
+            <span className="text-status-ok">free tier</span> (~500K chars/month).
+            Get your key at <span className="text-accent">cartesia.ai</span>.
+            Stored in <code className="bg-surface-2 px-1 rounded">backend/.env</code> only.
           </p>
 
           {health?.cartesia_configured ? (
             <div className="flex items-center gap-3">
-              <div className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-400 font-mono">
+              <div className="flex-1 bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm text-text-secondary font-mono">
                 sk-••••••••••••••••••••••••
               </div>
               <button
                 onClick={handleRemoveCartesiaKey}
                 disabled={cartesiaSaving}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-red-900/50 hover:bg-red-900 border border-red-800 rounded-xl text-red-300 text-sm disabled:opacity-50"
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-status-error/12 hover:bg-status-error/12 border border-status-error/30 rounded-xl text-status-error text-sm disabled:opacity-50"
               >
                 <Trash2 size={14} /> Remove
               </button>
@@ -1041,11 +1250,11 @@ export default function SettingsPage() {
                   onChange={(e) => setCartesiaKey(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSaveCartesiaKey()}
                   placeholder="sk-..."
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 pr-10 text-sm font-mono placeholder-gray-600 focus:outline-none focus:border-blue-600"
+                  className="w-full bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 pr-10 text-sm font-mono placeholder:text-text-muted focus:outline-none focus:border-accent/40"
                 />
                 <button
                   onClick={() => setCartesiaKeyVisible((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
                 >
                   {cartesiaKeyVisible ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
@@ -1053,7 +1262,7 @@ export default function SettingsPage() {
               <button
                 onClick={handleSaveCartesiaKey}
                 disabled={cartesiaSaving || !cartesiaKey.trim()}
-                className="px-5 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm font-medium"
+                className="px-5 py-2.5 bg-accent hover:bg-accent-bright disabled:opacity-40 rounded-xl text-sm font-medium"
               >
                 {cartesiaSaving ? "Saving..." : "Save"}
               </button>
@@ -1062,7 +1271,7 @@ export default function SettingsPage() {
 
           {cartesiaStatus && (
             <div className={`flex items-start gap-2 mt-3 p-3 rounded-xl text-sm ${
-              cartesiaStatus.ok ? "bg-green-900/40 text-green-300" : "bg-red-900/40 text-red-300"
+              cartesiaStatus.ok ? "bg-status-ok/10 text-status-ok" : "bg-status-error/12 text-status-error"
             }`}>
               {cartesiaStatus.ok ? <CheckCircle size={15} className="mt-0.5 shrink-0" /> : <AlertCircle size={15} className="mt-0.5 shrink-0" />}
               {cartesiaStatus.msg}
@@ -1070,15 +1279,15 @@ export default function SettingsPage() {
           )}
 
           {/* Cartesia voice selector */}
-          <div className="mt-4 pt-4 border-t border-gray-800">
-            <p className="text-xs text-gray-400 mb-2 font-medium">Voice</p>
+          <div className="mt-4 pt-4 border-t border-border-subtle">
+            <p className="text-xs text-text-secondary mb-2 font-medium">Voice</p>
             <div className="flex flex-col gap-2">
               <select
                 value={CARTESIA_VOICES.some((v) => v.id === cartesiaVoiceId) ? cartesiaVoiceId : "custom"}
                 onChange={(e) => {
                   if (e.target.value !== "custom") setCartesiaVoiceId(e.target.value);
                 }}
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm"
+                className="w-full bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm"
               >
                 {CARTESIA_VOICES.map((v) => (
                   <option key={v.id} value={v.id}>{v.name}</option>
@@ -1090,12 +1299,12 @@ export default function SettingsPage() {
                   value={cartesiaVoiceId}
                   onChange={(e) => setCartesiaVoiceId(e.target.value)}
                   placeholder="Voice ID (UUID)"
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm font-mono placeholder-gray-600 focus:outline-none focus:border-blue-600"
+                  className="flex-1 bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm font-mono placeholder:text-text-muted focus:outline-none focus:border-accent/40"
                 />
                 <button
                   onClick={handleSaveCartesiaVoice}
                   disabled={cartesiaVoiceSaving || !cartesiaVoiceId.trim() || cartesiaVoiceId.trim() === health?.cartesia_voice_id}
-                  className="px-5 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm font-medium"
+                  className="px-5 py-2.5 bg-accent hover:bg-accent-bright disabled:opacity-40 rounded-xl text-sm font-medium"
                 >
                   {cartesiaVoiceSaving ? "Saving..." : "Use voice"}
                 </button>
@@ -1103,7 +1312,7 @@ export default function SettingsPage() {
             </div>
             {cartesiaVoiceStatus && (
               <div className={`flex items-start gap-2 mt-2 p-2 rounded-lg text-xs ${
-                cartesiaVoiceStatus.ok ? "bg-green-900/40 text-green-300" : "bg-red-900/40 text-red-300"
+                cartesiaVoiceStatus.ok ? "bg-status-ok/10 text-status-ok" : "bg-status-error/12 text-status-error"
               }`}>
                 {cartesiaVoiceStatus.ok ? <CheckCircle size={13} className="mt-0.5 shrink-0" /> : <AlertCircle size={13} className="mt-0.5 shrink-0" />}
                 {cartesiaVoiceStatus.msg}
@@ -1112,13 +1321,13 @@ export default function SettingsPage() {
           </div>
 
           {/* Cartesia model sub-selector */}
-          <div className="mt-4 pt-4 border-t border-gray-800">
-            <p className="text-xs text-gray-400 mb-2 font-medium">Cartesia Model</p>
+          <div className="mt-4 pt-4 border-t border-border-subtle">
+            <p className="text-xs text-text-secondary mb-2 font-medium">Cartesia Model</p>
             <div className="flex gap-2">
               <select
                 value={cartesiaModel}
                 onChange={(e) => setCartesiaModel(e.target.value as "sonic-2" | "sonic-english")}
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm"
+                className="flex-1 bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm"
               >
                 <option value="sonic-2">sonic-2 — best quality</option>
                 <option value="sonic-english">sonic-english — faster &amp; cheaper</option>
@@ -1126,14 +1335,14 @@ export default function SettingsPage() {
               <button
                 onClick={handleSaveCartesiaModel}
                 disabled={cartesiaModelSaving || cartesiaModel === health?.cartesia_model}
-                className="px-5 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm font-medium"
+                className="px-5 py-2.5 bg-accent hover:bg-accent-bright disabled:opacity-40 rounded-xl text-sm font-medium"
               >
                 {cartesiaModelSaving ? "Saving..." : "Use model"}
               </button>
             </div>
             {cartesiaModelStatus && (
               <div className={`flex items-start gap-2 mt-2 p-2 rounded-lg text-xs ${
-                cartesiaModelStatus.ok ? "bg-green-900/40 text-green-300" : "bg-red-900/40 text-red-300"
+                cartesiaModelStatus.ok ? "bg-status-ok/10 text-status-ok" : "bg-status-error/12 text-status-error"
               }`}>
                 {cartesiaModelStatus.ok ? <CheckCircle size={13} className="mt-0.5 shrink-0" /> : <AlertCircle size={13} className="mt-0.5 shrink-0" />}
                 {cartesiaModelStatus.msg}
@@ -1143,26 +1352,26 @@ export default function SettingsPage() {
         </div>
 
         {/* Deepgram API key */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5">
-          <h2 className="text-sm font-semibold text-gray-300 mb-1 flex items-center gap-2">
+        <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-5">
+          <h2 className="text-sm font-semibold text-text-primary mb-1 flex items-center gap-2">
             <Key size={15} /> Deepgram API Key
           </h2>
-          <p className="text-xs text-gray-500 mb-4">
-            Powers <span className="text-gray-300">Deepgram Aura</span> TTS — ~200ms latency with a{" "}
-            <span className="text-green-400">$200 one-time signup credit</span> (not monthly).
-            Get your key at <span className="text-blue-400">deepgram.com</span>.
-            Stored in <code className="bg-gray-800 px-1 rounded">backend/.env</code> only.
+          <p className="text-xs text-text-muted mb-4">
+            Powers <span className="text-text-primary">Deepgram Aura</span> TTS — ~200ms latency with a{" "}
+            <span className="text-status-ok">$200 one-time signup credit</span> (not monthly).
+            Get your key at <span className="text-accent">deepgram.com</span>.
+            Stored in <code className="bg-surface-2 px-1 rounded">backend/.env</code> only.
           </p>
 
           {health?.deepgram_configured ? (
             <div className="flex items-center gap-3">
-              <div className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-400 font-mono">
+              <div className="flex-1 bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm text-text-secondary font-mono">
                 ••••••••••••••••••••••••••••••••••••••••
               </div>
               <button
                 onClick={handleRemoveDeepgramKey}
                 disabled={deepgramSaving}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-red-900/50 hover:bg-red-900 border border-red-800 rounded-xl text-red-300 text-sm disabled:opacity-50"
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-status-error/12 hover:bg-status-error/12 border border-status-error/30 rounded-xl text-status-error text-sm disabled:opacity-50"
               >
                 <Trash2 size={14} /> Remove
               </button>
@@ -1176,11 +1385,11 @@ export default function SettingsPage() {
                   onChange={(e) => setDeepgramKey(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSaveDeepgramKey()}
                   placeholder="Token..."
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 pr-10 text-sm font-mono placeholder-gray-600 focus:outline-none focus:border-blue-600"
+                  className="w-full bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 pr-10 text-sm font-mono placeholder:text-text-muted focus:outline-none focus:border-accent/40"
                 />
                 <button
                   onClick={() => setDeepgramKeyVisible((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
                 >
                   {deepgramKeyVisible ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
@@ -1188,7 +1397,7 @@ export default function SettingsPage() {
               <button
                 onClick={handleSaveDeepgramKey}
                 disabled={deepgramSaving || !deepgramKey.trim()}
-                className="px-5 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm font-medium"
+                className="px-5 py-2.5 bg-accent hover:bg-accent-bright disabled:opacity-40 rounded-xl text-sm font-medium"
               >
                 {deepgramSaving ? "Saving..." : "Save"}
               </button>
@@ -1197,7 +1406,7 @@ export default function SettingsPage() {
 
           {deepgramStatus && (
             <div className={`flex items-start gap-2 mt-3 p-3 rounded-xl text-sm ${
-              deepgramStatus.ok ? "bg-green-900/40 text-green-300" : "bg-red-900/40 text-red-300"
+              deepgramStatus.ok ? "bg-status-ok/10 text-status-ok" : "bg-status-error/12 text-status-error"
             }`}>
               {deepgramStatus.ok ? <CheckCircle size={15} className="mt-0.5 shrink-0" /> : <AlertCircle size={15} className="mt-0.5 shrink-0" />}
               {deepgramStatus.msg}
@@ -1205,13 +1414,13 @@ export default function SettingsPage() {
           )}
 
           {/* Deepgram model sub-selector */}
-          <div className="mt-4 pt-4 border-t border-gray-800">
-            <p className="text-xs text-gray-400 mb-2 font-medium">Aura Voice Model</p>
+          <div className="mt-4 pt-4 border-t border-border-subtle">
+            <p className="text-xs text-text-secondary mb-2 font-medium">Aura Voice Model</p>
             <div className="flex gap-2">
               <select
                 value={deepgramModel}
                 onChange={(e) => setDeepgramModel(e.target.value)}
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm"
+                className="flex-1 bg-surface-2 border border-border-default rounded-xl px-4 py-2.5 text-sm"
               >
                 <option value="aura-2-en-us">aura-2-en-us — best quality</option>
                 <option value="aura-asteria-en">aura-asteria-en — fastest &amp; cheapest</option>
@@ -1221,14 +1430,14 @@ export default function SettingsPage() {
               <button
                 onClick={handleSaveDeepgramModel}
                 disabled={deepgramModelSaving || deepgramModel === health?.deepgram_model}
-                className="px-5 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 rounded-xl text-sm font-medium"
+                className="px-5 py-2.5 bg-accent hover:bg-accent-bright disabled:opacity-40 rounded-xl text-sm font-medium"
               >
                 {deepgramModelSaving ? "Saving..." : "Use model"}
               </button>
             </div>
             {deepgramModelStatus && (
               <div className={`flex items-start gap-2 mt-2 p-2 rounded-lg text-xs ${
-                deepgramModelStatus.ok ? "bg-green-900/40 text-green-300" : "bg-red-900/40 text-red-300"
+                deepgramModelStatus.ok ? "bg-status-ok/10 text-status-ok" : "bg-status-error/12 text-status-error"
               }`}>
                 {deepgramModelStatus.ok ? <CheckCircle size={13} className="mt-0.5 shrink-0" /> : <AlertCircle size={13} className="mt-0.5 shrink-0" />}
                 {deepgramModelStatus.msg}
@@ -1238,17 +1447,17 @@ export default function SettingsPage() {
         </div>
 
         {/* Upload question bank */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5">
-          <h2 className="text-sm font-semibold text-gray-300 mb-2">Upload Question Bank</h2>
-          <p className="text-xs text-gray-500 mb-4">
-            CSV must have: <code className="bg-gray-800 px-1 rounded">topic</code>, <code className="bg-gray-800 px-1 rounded">question</code>.
-            Optional: <code className="bg-gray-800 px-1 rounded">difficulty</code>, <code className="bg-gray-800 px-1 rounded">company</code>, <code className="bg-gray-800 px-1 rounded">category</code>, <code className="bg-gray-800 px-1 rounded">expected_keywords</code>
+        <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5 mb-5">
+          <h2 className="text-sm font-semibold text-text-primary mb-2">Upload Question Bank</h2>
+          <p className="text-xs text-text-muted mb-4">
+            CSV must have: <code className="bg-surface-2 px-1 rounded">topic</code>, <code className="bg-surface-2 px-1 rounded">question</code>.
+            Optional: <code className="bg-surface-2 px-1 rounded">difficulty</code>, <code className="bg-surface-2 px-1 rounded">company</code>, <code className="bg-surface-2 px-1 rounded">category</code>, <code className="bg-surface-2 px-1 rounded">expected_keywords</code>
           </p>
 
           <button
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
-            className="flex items-center gap-2 px-5 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 rounded-xl text-sm font-medium"
+            className="flex items-center gap-2 px-5 py-2.5 bg-accent hover:bg-accent-bright disabled:opacity-50 rounded-xl text-sm font-medium"
           >
             <Upload size={16} />
             {uploading ? "Uploading..." : "Choose CSV file"}
@@ -1257,7 +1466,7 @@ export default function SettingsPage() {
 
           {uploadStatus && (
             <div className={`flex items-start gap-2 mt-4 p-3 rounded-xl text-sm ${
-              uploadStatus.ok ? "bg-green-900/40 text-green-300" : "bg-red-900/40 text-red-300"
+              uploadStatus.ok ? "bg-status-ok/10 text-status-ok" : "bg-status-error/12 text-status-error"
             }`}>
               {uploadStatus.ok ? <CheckCircle size={16} className="mt-0.5 shrink-0" /> : <AlertCircle size={16} className="mt-0.5 shrink-0" />}
               {uploadStatus.msg}
@@ -1266,29 +1475,30 @@ export default function SettingsPage() {
         </div>
 
         {/* Loaded topics */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-          <h2 className="text-sm font-semibold text-gray-300 mb-4">Loaded Topics ({topics.length})</h2>
+        <div className="bg-surface-1 border border-border-subtle rounded-2xl p-5">
+          <h2 className="text-sm font-semibold text-text-primary mb-4">Loaded Topics ({topics.length})</h2>
           <div className="grid grid-cols-2 gap-2">
             {topics.map((t) => (
-              <div key={t.topic} className="flex justify-between bg-gray-800 rounded-lg px-3 py-2 text-sm">
-                <span className="text-gray-200 truncate">{t.topic}</span>
-                <span className="text-gray-500 ml-2 shrink-0">{t.count}q</span>
+              <div key={t.topic} className="flex justify-between bg-surface-2 rounded-lg px-3 py-2 text-sm">
+                <span className="text-text-primary truncate">{t.topic}</span>
+                <span className="text-text-muted ml-2 shrink-0">{t.count}q</span>
               </div>
             ))}
-            {topics.length === 0 && <p className="text-gray-500 text-sm col-span-2">No questions loaded yet.</p>}
+            {topics.length === 0 && <p className="text-text-muted text-sm col-span-2">No questions loaded yet.</p>}
           </div>
         </div>
       </div>
-    </>
-  );
+    </div>
+  </>
+);
 }
 
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between">
-      <span className="text-gray-400">{label}</span>
-      <span className="text-gray-200 font-mono text-xs">{value}</span>
+      <span className="text-text-secondary">{label}</span>
+      <span className="text-text-primary font-mono text-xs">{value}</span>
     </div>
   );
 }

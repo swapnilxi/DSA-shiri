@@ -80,8 +80,43 @@ CREATE TABLE IF NOT EXISTS response_followups (
     created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- DSA submissions, execution status, feedback, and spaced repetition tracking
+CREATE TABLE IF NOT EXISTS dsa_submissions (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    question_id             INTEGER NOT NULL REFERENCES questions(id),
+    code                    TEXT NOT NULL,
+    language                TEXT DEFAULT 'python',
+    status                  TEXT CHECK(status IN ('accepted', 'needs_revision', 'failed')) DEFAULT 'accepted',
+    efficiency_score        INTEGER DEFAULT 80,
+    correctness_score       INTEGER DEFAULT 85,
+    xp_earned               INTEGER DEFAULT 50,
+    feedback                TEXT,
+    time_complexity         TEXT,
+    space_complexity        TEXT,
+    strengths_json          TEXT DEFAULT '[]',
+    edge_cases_json         TEXT DEFAULT '[]',
+    optimizations_json      TEXT DEFAULT '[]',
+    submitted_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
+    next_review_at          DATETIME
+);
+
+-- Global persistent learning state: XP, level, daily streak, active quest, achievements
+CREATE TABLE IF NOT EXISTS user_learning_profile (
+    id                      INTEGER PRIMARY KEY DEFAULT 1,
+    total_xp                INTEGER DEFAULT 0,
+    level                   INTEGER DEFAULT 1,
+    streak_days             INTEGER DEFAULT 1,
+    last_active_date        TEXT,
+    quest_date              TEXT,
+    quest_data_json         TEXT DEFAULT '{}',
+    achievements_json       TEXT DEFAULT '[]',
+    updated_at              DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_responses_session ON responses(session_id);
 CREATE INDEX IF NOT EXISTS idx_scores_response ON scores(response_id);
 CREATE INDEX IF NOT EXISTS idx_questions_topic ON questions(topic);
 CREATE INDEX IF NOT EXISTS idx_session_questions_session ON session_questions(session_id);
 CREATE INDEX IF NOT EXISTS idx_response_followups_response ON response_followups(response_id);
+CREATE INDEX IF NOT EXISTS idx_dsa_submissions_question ON dsa_submissions(question_id);
+CREATE INDEX IF NOT EXISTS idx_dsa_submissions_date ON dsa_submissions(submitted_at);

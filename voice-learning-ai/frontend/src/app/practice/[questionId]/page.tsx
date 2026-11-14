@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { BrainCircuit, Mic, SendHorizontal, Square } from "lucide-react";
+import { BrainCircuit, Lightbulb, Link2, Map, Mic, Puzzle, Search, SendHorizontal, Sparkles, Square, Star, Target, MessageSquare, Telescope, Zap } from "lucide-react";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { Waveform } from "@/components/interview/Waveform";
 import { api } from "@/lib/api";
 import type { FollowupReport, FollowupTurn, Question } from "@/lib/api";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
+import { NovaBadge } from "@/components/ui/NovaBadge";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -29,19 +30,19 @@ interface ChatMsg {
 // ── Constants ─────────────────────────────────────────────────────────────
 
 const DIFF_COLORS: Record<string, string> = {
-  Easy: "text-green-400 bg-green-900/30 border-green-800",
-  Medium: "text-yellow-400 bg-yellow-900/30 border-yellow-800",
-  Hard: "text-red-400 bg-red-900/30 border-red-800",
+  Easy: "text-status-ok bg-status-ok/10 border-status-ok/30",
+  Medium: "text-status-warn bg-status-warn/10 border-status-warn/30",
+  Hard: "text-status-error bg-status-error/12 border-status-error/30",
 };
 
-const SECTIONS: { key: SectionKey; icon: string; label: string; desc: string }[] = [
-  { key: "hints", icon: "💡", label: "Hints", desc: "Progressive hints from subtle to explicit" },
-  { key: "concepts", icon: "🧩", label: "Key Concepts", desc: "Core knowledge areas to brush up on" },
-  { key: "approach", icon: "🗺️", label: "Approach Guide", desc: "Step-by-step thinking process" },
-  { key: "sample_answer", icon: "⭐", label: "Sample Answer", desc: "Model answer with key takeaways" },
-  { key: "followups", icon: "🔗", label: "Follow-up Questions", desc: "What an interviewer might ask next" },
-  { key: "deep_dive", icon: "🔭", label: "Dive Deeper", desc: "Real-world scenarios, core concepts, mental models" },
-  { key: "quiz", icon: "🎯", label: "Quick Quiz", desc: "Test your understanding with 4 MCQ questions" },
+const SECTIONS: { key: SectionKey; icon: ReactNode; label: string; desc: string }[] = [
+  { key: "hints", icon: <Lightbulb size={16} />, label: "Hints", desc: "Progressive hints from subtle to explicit" },
+  { key: "concepts", icon: <Puzzle size={16} />, label: "Key Concepts", desc: "Core knowledge areas to brush up on" },
+  { key: "approach", icon: <Map size={16} />, label: "Approach Guide", desc: "Step-by-step thinking process" },
+  { key: "sample_answer", icon: <Star size={16} />, label: "Sample Answer", desc: "Model answer with key takeaways" },
+  { key: "followups", icon: <Link2 size={16} />, label: "Follow-up Questions", desc: "What an interviewer might ask next" },
+  { key: "deep_dive", icon: <Telescope size={16} />, label: "Dive Deeper", desc: "Real-world scenarios, core concepts, mental models" },
+  { key: "quiz", icon: <Target size={16} />, label: "Quick Quiz", desc: "Test your understanding with 4 MCQ questions" },
 ];
 
 const QUICK_PROMPTS = [
@@ -62,16 +63,16 @@ function renderMarkdown(text: string): React.ReactNode[] {
     let m: RegExpExecArray | null;
     while ((m = regex.exec(line)) !== null) {
       if (m.index > last) parts.push(line.slice(last, m.index));
-      if (m[1]) parts.push(<code key={m.index} className="px-1 py-0.5 bg-gray-700 rounded text-emerald-300 text-xs font-mono">{m[1]}</code>);
+      if (m[1]) parts.push(<code key={m.index} className="px-1 py-0.5 bg-surface-3 rounded text-status-ok text-xs font-mono">{m[1]}</code>);
       if (m[2]) parts.push(<strong key={m.index} className="text-white font-semibold">{m[2]}</strong>);
       last = m.index + m[0].length;
     }
     if (last < line.length) parts.push(line.slice(last));
     const isBullet = line.trimStart().startsWith("- ") || line.trimStart().startsWith("• ");
     if (isBullet) {
-      return <li key={i} className="ml-4 list-disc text-gray-300 text-sm leading-relaxed">{parts.map((p, j) => typeof p === "string" ? p.replace(/^[-•]\s*/, "") : p)}</li>;
+      return <li key={i} className="ml-4 list-disc text-text-primary text-sm leading-relaxed">{parts.map((p, j) => typeof p === "string" ? p.replace(/^[-•]\s*/, "") : p)}</li>;
     }
-    return <p key={i} className={`text-gray-300 text-sm leading-relaxed ${line === "" ? "h-2" : ""}`}>{parts}</p>;
+    return <p key={i} className={`text-text-primary text-sm leading-relaxed ${line === "" ? "h-2" : ""}`}>{parts}</p>;
   });
 }
 
@@ -83,21 +84,21 @@ function HintsContent({ content }: { content: unknown }) {
   return (
     <div className="space-y-3">
       {hints.slice(0, revealed).map((h, i) => (
-        <div key={i} className="flex gap-3 p-3 bg-yellow-900/20 border border-yellow-800/40 rounded-lg">
-          <span className="text-yellow-400 font-bold text-sm shrink-0">#{i + 1}</span>
-          <p className="text-gray-200 text-sm leading-relaxed">{h}</p>
+        <div key={i} className="flex gap-3 p-3 bg-status-warn/10 border border-status-warn/30 rounded-lg">
+          <span className="text-status-warn font-bold text-sm shrink-0">#{i + 1}</span>
+          <p className="text-text-primary text-sm leading-relaxed">{h}</p>
         </div>
       ))}
       {revealed < hints.length && (
         <button
           onClick={() => setRevealed(r => r + 1)}
-          className="w-full py-2 border border-dashed border-yellow-800 rounded-lg text-yellow-400 text-sm hover:bg-yellow-900/20 transition-colors"
+          className="w-full py-2 border border-dashed border-status-warn/30 rounded-lg text-status-warn text-sm hover:bg-status-warn/10 transition-colors"
         >
           {revealed === 0 ? "Reveal First Hint" : `Reveal Hint ${revealed + 1} of ${hints.length}`}
         </button>
       )}
       {revealed === hints.length && (
-        <p className="text-center text-xs text-gray-600 py-1">All hints revealed</p>
+        <p className="text-center text-xs text-text-muted py-1">All hints revealed</p>
       )}
     </div>
   );
@@ -108,7 +109,7 @@ function ConceptsContent({ content }: { content: unknown }) {
   return (
     <div className="flex flex-wrap gap-2">
       {concepts.map((c, i) => (
-        <span key={i} className="px-3 py-1.5 bg-blue-900/30 border border-blue-800/50 text-blue-300 rounded-full text-xs font-medium">
+        <span key={i} className="px-3 py-1.5 bg-accent/30 border border-accent/25 text-accent rounded-full text-xs font-medium">
           {c}
         </span>
       ))}
@@ -121,23 +122,23 @@ function ApproachContent({ content }: { content: unknown }) {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Steps</p>
+        <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Steps</p>
         <ol className="space-y-2">
           {data.steps.map((s, i) => (
             <li key={i} className="flex gap-3">
-              <span className="shrink-0 w-5 h-5 rounded-full bg-blue-900/50 border border-blue-700 text-blue-300 text-xs flex items-center justify-center font-bold">{i + 1}</span>
-              <p className="text-gray-200 text-sm leading-relaxed">{s}</p>
+              <span className="shrink-0 w-5 h-5 rounded-full bg-accent/50 border border-accent/35 text-accent text-xs flex items-center justify-center font-bold">{i + 1}</span>
+              <p className="text-text-primary text-sm leading-relaxed">{s}</p>
             </li>
           ))}
         </ol>
       </div>
       {data.tips?.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Interviewer Tips</p>
+          <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Interviewer Tips</p>
           <ul className="space-y-1">
             {data.tips.map((t, i) => (
-              <li key={i} className="flex gap-2 text-sm text-gray-300">
-                <span className="text-emerald-400 shrink-0">→</span>
+              <li key={i} className="flex gap-2 text-sm text-text-primary">
+                <span className="text-status-ok shrink-0">→</span>
                 {t}
               </li>
             ))}
@@ -156,12 +157,12 @@ function SampleAnswerContent({ content }: { content: unknown }) {
         <div className="space-y-1">{renderMarkdown(data.answer)}</div>
       </div>
       {data.key_points?.length > 0 && (
-        <div className="p-3 bg-emerald-900/20 border border-emerald-800/40 rounded-lg">
-          <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2">Key Takeaways</p>
+        <div className="p-3 bg-status-ok/10 border border-status-ok/30 rounded-lg">
+          <p className="text-xs font-semibold text-status-ok uppercase tracking-wider mb-2">Key Takeaways</p>
           <ul className="space-y-1">
             {data.key_points.map((kp, i) => (
-              <li key={i} className="flex gap-2 text-sm text-gray-300">
-                <span className="text-emerald-400 shrink-0">✓</span>
+              <li key={i} className="flex gap-2 text-sm text-text-primary">
+                <span className="text-status-ok shrink-0">✓</span>
                 {kp}
               </li>
             ))}
@@ -177,9 +178,9 @@ function FollowupsContent({ content }: { content: unknown }) {
   return (
     <div className="space-y-2">
       {questions.map((q, i) => (
-        <div key={i} className="flex gap-3 p-3 bg-purple-900/20 border border-purple-800/40 rounded-lg">
-          <span className="text-purple-400 shrink-0 text-sm font-bold">{i + 1}.</span>
-          <p className="text-gray-200 text-sm leading-relaxed">{q}</p>
+        <div key={i} className="flex gap-3 p-3 bg-gold/10 border border-gold/20 rounded-lg">
+          <span className="text-gold shrink-0 text-sm font-bold">{i + 1}.</span>
+          <p className="text-text-primary text-sm leading-relaxed">{q}</p>
         </div>
       ))}
     </div>
@@ -236,8 +237,8 @@ function QuizContent({ initialQuestions, questionId, model }: {
 
   // Dot color per question index
   function dotColor(i: number) {
-    if (answers[i] === undefined) return i === cursor ? "bg-blue-400 scale-125" : "bg-gray-600";
-    return answers[i] === allQuestions[i].correct_index ? "bg-green-500" : "bg-red-500";
+    if (answers[i] === undefined) return i === cursor ? "bg-accent scale-125" : "bg-surface-3";
+    return answers[i] === allQuestions[i].correct_index ? "bg-status-ok" : "bg-status-error";
   }
 
   return (
@@ -249,7 +250,7 @@ function QuizContent({ initialQuestions, questionId, model }: {
         <button
           onClick={() => setCursor(c => c - 1)}
           disabled={cursor === 0}
-          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-border-default text-text-secondary hover:border-border-strong hover:text-text-primary disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/></svg>
         </button>
@@ -265,9 +266,9 @@ function QuizContent({ initialQuestions, questionId, model }: {
               />
             ))}
           </div>
-          <span className="text-xs text-gray-600">
+          <span className="text-xs text-text-muted">
             Q{cursor + 1} / {total}
-            {total > 4 && <span className="ml-1.5 text-gray-700">· Round {Math.floor(cursor / 4) + 1}</span>}
+            {total > 4 && <span className="ml-1.5 text-text-muted">· Round {Math.floor(cursor / 4) + 1}</span>}
           </span>
         </div>
 
@@ -275,7 +276,7 @@ function QuizContent({ initialQuestions, questionId, model }: {
         <button
           onClick={() => setCursor(c => c + 1)}
           disabled={cursor === total - 1 || !submitted}
-          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-border-default text-text-secondary hover:border-border-strong hover:text-text-primary disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
           title={!submitted ? "Answer this question to continue" : ""}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg>
@@ -283,8 +284,8 @@ function QuizContent({ initialQuestions, questionId, model }: {
       </div>
 
       {/* ── Question card ── */}
-      <div className="bg-gray-800/60 border border-gray-700 rounded-xl p-4 space-y-3">
-        <p className="text-sm font-medium text-gray-200 leading-relaxed">
+      <div className="bg-surface-2/60 border border-border-default rounded-xl p-4 space-y-3">
+        <p className="text-sm font-medium text-text-primary leading-relaxed">
           {q.question}
         </p>
 
@@ -292,13 +293,13 @@ function QuizContent({ initialQuestions, questionId, model }: {
           {q.options.map((opt, oi) => {
             let cls = "w-full text-left px-3 py-2.5 rounded-lg border text-sm transition-colors ";
             if (!submitted) {
-              cls += "border-gray-600 text-gray-300 hover:border-blue-600 hover:bg-blue-900/20 hover:text-blue-200";
+              cls += "border-border-strong text-text-primary hover:border-accent/40 hover:bg-accent/20 hover:text-accent-bright";
             } else if (oi === q.correct_index) {
-              cls += "border-green-600 bg-green-900/30 text-green-200 font-medium";
+              cls += "border-status-ok/40 bg-status-ok/10 text-status-ok font-medium";
             } else if (oi === selected) {
-              cls += "border-red-600 bg-red-900/30 text-red-300";
+              cls += "border-status-error/45 bg-status-error/12 text-status-error";
             } else {
-              cls += "border-gray-700 text-gray-500";
+              cls += "border-border-default text-text-muted";
             }
             return (
               <button key={oi}
@@ -308,8 +309,8 @@ function QuizContent({ initialQuestions, questionId, model }: {
               >
                 <span className="font-mono text-xs mr-2 opacity-50">{String.fromCharCode(65 + oi)}.</span>
                 {opt}
-                {submitted && oi === q.correct_index && <span className="ml-2 text-green-400">✓</span>}
-                {submitted && oi === selected && oi !== q.correct_index && <span className="ml-2 text-red-400">✗</span>}
+                {submitted && oi === q.correct_index && <span className="ml-2 text-status-ok">✓</span>}
+                {submitted && oi === selected && oi !== q.correct_index && <span className="ml-2 text-status-error">✗</span>}
               </button>
             );
           })}
@@ -318,8 +319,8 @@ function QuizContent({ initialQuestions, questionId, model }: {
         {/* Explanation */}
         {submitted && (
           <div className={`flex gap-2 px-3 py-2.5 rounded-lg text-xs ${
-            isCorrect ? "bg-green-900/20 border border-green-800/40 text-green-300"
-                      : "bg-orange-900/20 border border-orange-800/40 text-orange-300"
+            isCorrect ? "bg-status-ok/10 border border-status-ok/30 text-status-ok"
+                      : "bg-gold/10 border border-gold/25 text-gold"
           }`}>
             <span className="shrink-0">{isCorrect ? "✓" : "💡"}</span>
             <span className="leading-relaxed">{q.explanation}</span>
@@ -332,9 +333,9 @@ function QuizContent({ initialQuestions, questionId, model }: {
         <div className="space-y-3">
           {/* Score banner */}
           <div className={`flex items-center justify-between px-4 py-2.5 rounded-xl border ${
-            batchCorrect === batchSize   ? "bg-green-900/30 border-green-700 text-green-300"
-            : batchCorrect >= batchSize / 2 ? "bg-yellow-900/30 border-yellow-700 text-yellow-300"
-            : "bg-red-900/30 border-red-700 text-red-300"
+            batchCorrect === batchSize   ? "bg-status-ok/10 border-status-ok/35 text-status-ok"
+            : batchCorrect >= batchSize / 2 ? "bg-status-warn/10 border-status-warn/35 text-status-warn"
+            : "bg-status-error/12 border-status-error/35 text-status-error"
           }`}>
             <span className="text-sm font-semibold">
               Round {Math.floor(batchEnd / 4) + 1} complete
@@ -343,14 +344,14 @@ function QuizContent({ initialQuestions, questionId, model }: {
           </div>
 
           {/* Generate more */}
-          {moreError && <p className="text-xs text-red-400">{moreError}</p>}
+          {moreError && <p className="text-xs text-status-error">{moreError}</p>}
           <button
             onClick={generateMore}
             disabled={loadingMore}
-            className="w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-blue-800 hover:border-blue-600 rounded-xl text-sm text-blue-400 hover:text-blue-300 disabled:opacity-50 transition-colors"
+            className="w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-accent/25 hover:border-accent/40 rounded-xl text-sm text-accent hover:text-accent disabled:opacity-50 transition-colors"
           >
             {loadingMore
-              ? <><span className="w-3.5 h-3.5 border border-blue-400 border-t-transparent rounded-full animate-spin" />Generating…</>
+              ? <><span className="w-3.5 h-3.5 border border-accent/50 border-t-transparent rounded-full animate-spin" />Generating…</>
               : <>Generate 4 more <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg></>
             }
           </button>
@@ -359,7 +360,7 @@ function QuizContent({ initialQuestions, questionId, model }: {
 
       {/* hint if unanswered and trying to go right */}
       {submitted === false && cursor < total - 1 && (
-        <p className="text-xs text-gray-700 text-center">Answer to unlock the next question →</p>
+        <p className="text-xs text-text-muted text-center">Answer to unlock the next question →</p>
       )}
     </div>
   );
@@ -384,38 +385,38 @@ function DeepDiveContent({ content }: { content: unknown }) {
     <div className="space-y-5">
 
       {/* TL;DR */}
-      <div className="p-4 bg-gradient-to-r from-blue-950/50 to-indigo-950/50 border border-blue-800/50 rounded-xl">
-        <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">TL;DR</p>
-        <p className="text-sm text-blue-100 leading-relaxed">{d.tldr}</p>
+      <div className="p-4 bg-gradient-to-r from-accent/20 to-accent/30 border border-accent/25 rounded-xl">
+        <p className="text-xs font-semibold text-accent uppercase tracking-wider mb-2">TL;DR</p>
+        <p className="text-sm text-accent-bright leading-relaxed">{d.tldr}</p>
       </div>
 
       {/* Real-world scenarios */}
       {d.real_world_scenarios?.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-1">🌍 Real-World Scenarios</p>
+          <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2 px-1">🌍 Real-World Scenarios</p>
           <div className="space-y-2">
             {d.real_world_scenarios.map((s, i) => (
-              <div key={i} className="border border-gray-700 rounded-xl overflow-hidden">
+              <div key={i} className="border border-border-default rounded-xl overflow-hidden">
                 <button
                   onClick={() => setOpenScenario(openScenario === i ? null : i)}
-                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-800/60 transition-colors text-left"
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-surface-2/60 transition-colors text-left"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="shrink-0 w-5 h-5 rounded-full bg-orange-900/50 border border-orange-700 text-orange-300 text-xs flex items-center justify-center font-bold">{i + 1}</span>
-                    <span className="text-sm font-medium text-gray-200 truncate">{s.title}</span>
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-gold/10 border border-gold/35 text-gold text-xs flex items-center justify-center font-bold">{i + 1}</span>
+                    <span className="text-sm font-medium text-text-primary truncate">{s.title}</span>
                   </div>
-                  <span className="text-gray-600 shrink-0 ml-2">{openScenario === i ? "▲" : "▼"}</span>
+                  <span className="text-text-muted shrink-0 ml-2">{openScenario === i ? "▲" : "▼"}</span>
                 </button>
                 {openScenario === i && (
-                  <div className="px-4 pb-4 space-y-3 border-t border-gray-800">
-                    <p className="text-xs text-gray-400 leading-relaxed pt-3">{s.context}</p>
-                    <div className="bg-green-950/25 border border-green-800/40 rounded-lg px-3 py-2.5">
-                      <p className="text-xs font-semibold text-green-400 mb-1">How this concept applies</p>
-                      <p className="text-xs text-green-200 leading-relaxed">{s.how_it_applies}</p>
+                  <div className="px-4 pb-4 space-y-3 border-t border-border-subtle">
+                    <p className="text-xs text-text-secondary leading-relaxed pt-3">{s.context}</p>
+                    <div className="bg-status-ok/10 border border-status-ok/30 rounded-lg px-3 py-2.5">
+                      <p className="text-xs font-semibold text-status-ok mb-1">How this concept applies</p>
+                      <p className="text-xs text-status-ok leading-relaxed">{s.how_it_applies}</p>
                     </div>
-                    <div className="bg-red-950/20 border border-red-800/30 rounded-lg px-3 py-2.5">
-                      <p className="text-xs font-semibold text-red-400 mb-1">What breaks without it</p>
-                      <p className="text-xs text-red-200 leading-relaxed">{s.what_breaks_without_it}</p>
+                    <div className="bg-status-error/10 border border-status-error/30 rounded-lg px-3 py-2.5">
+                      <p className="text-xs font-semibold text-status-error mb-1">What breaks without it</p>
+                      <p className="text-xs text-status-error leading-relaxed">{s.what_breaks_without_it}</p>
                     </div>
                   </div>
                 )}
@@ -428,28 +429,28 @@ function DeepDiveContent({ content }: { content: unknown }) {
       {/* Core concepts */}
       {d.core_concepts?.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-1">🧠 Core Concepts In Depth</p>
+          <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2 px-1">Core Concepts In Depth</p>
           <div className="space-y-2">
             {d.core_concepts.map((c, i) => (
-              <div key={i} className="border border-gray-700 rounded-xl overflow-hidden">
+              <div key={i} className="border border-border-default rounded-xl overflow-hidden">
                 <button
                   onClick={() => setOpenConcept(openConcept === i ? null : i)}
-                  className="w-full flex items-start justify-between px-4 py-3 hover:bg-gray-800/60 transition-colors text-left"
+                  className="w-full flex items-start justify-between px-4 py-3 hover:bg-surface-2/60 transition-colors text-left"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-200">{c.name}</p>
-                    <p className="text-xs text-gray-500 mt-0.5 truncate">{c.one_liner}</p>
+                    <p className="text-sm font-semibold text-text-primary">{c.name}</p>
+                    <p className="text-xs text-text-muted mt-0.5 truncate">{c.one_liner}</p>
                   </div>
-                  <span className="text-gray-600 shrink-0 ml-3 mt-0.5">{openConcept === i ? "▲" : "▼"}</span>
+                  <span className="text-text-muted shrink-0 ml-3 mt-0.5">{openConcept === i ? "▲" : "▼"}</span>
                 </button>
                 {openConcept === i && (
-                  <div className="px-4 pb-4 space-y-3 border-t border-gray-800">
-                    <p className="text-sm text-gray-300 leading-relaxed pt-3">{c.deep_explanation}</p>
-                    <div className="flex gap-2 bg-amber-950/25 border border-amber-800/40 rounded-lg px-3 py-2.5">
-                      <span className="shrink-0 text-amber-400">💡</span>
+                  <div className="px-4 pb-4 space-y-3 border-t border-border-subtle">
+                    <p className="text-sm text-text-primary leading-relaxed pt-3">{c.deep_explanation}</p>
+                    <div className="flex gap-2 bg-gold/10 border border-gold/25 rounded-lg px-3 py-2.5">
+                      <Lightbulb size={13} className="shrink-0 text-gold" />
                       <div>
-                        <p className="text-xs font-semibold text-amber-400 mb-0.5">Analogy</p>
-                        <p className="text-xs text-amber-200 leading-relaxed">{c.analogy}</p>
+                        <p className="text-xs font-semibold text-gold mb-0.5">Analogy</p>
+                        <p className="text-xs text-text-secondary leading-relaxed">{c.analogy}</p>
                       </div>
                     </div>
                   </div>
@@ -462,34 +463,34 @@ function DeepDiveContent({ content }: { content: unknown }) {
 
       {/* Mental model */}
       {d.mental_model && (
-        <div className="flex gap-3 bg-purple-950/25 border border-purple-800/40 rounded-xl px-4 py-3.5">
-          <span className="text-purple-400 text-lg shrink-0">🗺️</span>
+        <div className="flex gap-3 bg-gold/10 border border-gold/20 rounded-xl px-4 py-3.5">
+          <Map size={17} className="text-gold shrink-0 mt-0.5" />
           <div>
-            <p className="text-xs font-semibold text-purple-400 mb-1.5">Mental Model</p>
-            <p className="text-sm text-purple-100 leading-relaxed">{d.mental_model}</p>
+            <p className="text-xs font-semibold text-gold mb-1.5">Mental Model</p>
+            <p className="text-sm text-gold leading-relaxed">{d.mental_model}</p>
           </div>
         </div>
       )}
 
       {/* How experts think about it */}
       {d.how_experts_think_about_it && (
-        <div className="flex gap-3 bg-emerald-950/25 border border-emerald-800/40 rounded-xl px-4 py-3.5">
-          <span className="text-emerald-400 text-lg shrink-0">👷</span>
+        <div className="flex gap-3 bg-status-ok/10 border border-status-ok/30 rounded-xl px-4 py-3.5">
+          <span className="text-status-ok text-lg shrink-0">👷</span>
           <div>
-            <p className="text-xs font-semibold text-emerald-400 mb-1.5">How Experts Think About It</p>
-            <p className="text-sm text-emerald-100 leading-relaxed">{d.how_experts_think_about_it}</p>
+            <p className="text-xs font-semibold text-status-ok mb-1.5">How Experts Think About It</p>
+            <p className="text-sm text-status-ok leading-relaxed">{d.how_experts_think_about_it}</p>
           </div>
         </div>
       )}
 
       {/* Common misconceptions */}
       {d.common_misconceptions?.length > 0 && (
-        <div className="bg-red-950/20 border border-red-800/30 rounded-xl px-4 py-3.5">
-          <p className="text-xs font-semibold text-red-400 mb-2">⚠️ Common Misconceptions</p>
+        <div className="bg-status-error/10 border border-status-error/30 rounded-xl px-4 py-3.5">
+          <p className="text-xs font-semibold text-status-error mb-2">⚠️ Common Misconceptions</p>
           <ul className="space-y-1.5">
             {d.common_misconceptions.map((m, i) => (
-              <li key={i} className="flex gap-2 text-xs text-red-200 leading-relaxed">
-                <span className="text-red-600 shrink-0 mt-0.5">✗</span>{m}
+              <li key={i} className="flex gap-2 text-xs text-status-error leading-relaxed">
+                <span className="text-status-error shrink-0 mt-0.5">✗</span>{m}
               </li>
             ))}
           </ul>
@@ -499,10 +500,10 @@ function DeepDiveContent({ content }: { content: unknown }) {
       {/* Rabbit holes */}
       {d.rabbit_holes?.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-1">🐇 Rabbit Holes Worth Exploring</p>
+          <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2 px-1">🐇 Rabbit Holes Worth Exploring</p>
           <div className="flex flex-wrap gap-2">
             {d.rabbit_holes.map((r, i) => (
-              <span key={i} className="px-3 py-1.5 bg-gray-800 border border-gray-700 hover:border-blue-700 text-gray-300 rounded-full text-xs font-medium transition-colors cursor-default">
+              <span key={i} className="px-3 py-1.5 bg-surface-2 border border-border-default hover:border-accent/35 text-text-primary rounded-full text-xs font-medium transition-colors cursor-default">
                 {r}
               </span>
             ))}
@@ -571,6 +572,15 @@ export default function PracticePage() {
   const followupEndRef = useRef<HTMLDivElement>(null);
   const [followupPanelOpen, setFollowupPanelOpen] = useState(false);
 
+  // ── Code editor & submission ───────────────────────────────────────────────
+  const [code, setCode] = useState("");
+  const [codeSubmitting, setCodeSubmitting] = useState(false);
+  const [codeResult, setCodeResult] = useState<import("@/lib/api").CodeSubmissionResponse | null>(null);
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [pastSubmissions, setPastSubmissions] = useState<import("@/lib/api").DsaSubmissionRecord[]>([]);
+  const [xpToast, setXpToast] = useState<{ xp: number; level: number } | null>(null);
+  const [codeEditorOpen, setCodeEditorOpen] = useState(true);
+
   // Play base64-encoded WAV audio (TTS response)
   const playFollowupAudio = useCallback((audio_b64: string | null) => {
     if (!audio_b64) return;
@@ -610,6 +620,8 @@ export default function PracticePage() {
       const saved = typeof window !== "undefined" ? localStorage.getItem("selectedModel") : null;
       setModel(saved || data.default);
     }).catch(() => {});
+    // Load past submissions for spaced repetition display
+    api.getQuestionSubmissions(id).then(setPastSubmissions).catch(() => {});
   }, [questionId]);
 
   // Restore notes from localStorage
@@ -690,6 +702,45 @@ export default function PracticePage() {
       setSections(prev => ({ ...prev, [key]: { ...prev[key], open: !prev[key].open } }));
     }
   }, [sections, questionId, model]);
+
+  const submitCode = useCallback(async () => {
+    const trimmed = code.trim();
+    if (!trimmed || codeSubmitting) return;
+    setCodeSubmitting(true);
+    setCodeError(null);
+    setCodeResult(null);
+    try {
+      const result = await api.submitPythonCode(parseInt(questionId, 10), trimmed, {
+        hints_used: sections.hints?.generated ? 1 : 0,
+        model: model || undefined,
+      });
+      setCodeResult(result);
+      setPastSubmissions(prev => [{
+        id: result.submission_id,
+        question_id: parseInt(questionId, 10),
+        code: trimmed,
+        language: "python",
+        status: result.evaluation.status,
+        efficiency_score: result.evaluation.efficiency_score,
+        correctness_score: result.evaluation.correctness_score,
+        xp_earned: result.xp_earned,
+        feedback: result.evaluation.feedback,
+        time_complexity: result.evaluation.time_complexity,
+        space_complexity: result.evaluation.space_complexity,
+        strengths: result.evaluation.strengths,
+        edge_cases: result.evaluation.edge_cases,
+        optimizations: result.evaluation.optimizations,
+        submitted_at: new Date().toISOString(),
+        next_review_at: undefined,
+      }, ...prev]);
+      setXpToast({ xp: result.xp_earned, level: result.level });
+      setTimeout(() => setXpToast(null), 4000);
+    } catch (e: unknown) {
+      setCodeError(e instanceof Error ? e.message : "Submission failed");
+    } finally {
+      setCodeSubmitting(false);
+    }
+  }, [code, codeSubmitting, model, questionId, sections]);
 
   const sendChat = useCallback(async (text: string) => {
     const msg = text.trim();
@@ -788,10 +839,10 @@ export default function PracticePage() {
 
   if (loadError) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="min-h-screen bg-surface-0 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-400 mb-4">{loadError}</p>
-          <button onClick={() => router.back()} className="text-blue-400 text-sm hover:underline">← Go back</button>
+          <p className="text-status-error mb-4">{loadError}</p>
+          <button onClick={() => router.back()} className="text-accent text-sm hover:underline">← Go back</button>
         </div>
       </div>
     );
@@ -799,10 +850,10 @@ export default function PracticePage() {
 
   if (!question) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="min-h-screen bg-surface-0 flex items-center justify-center">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-gray-500 text-sm">Loading question…</p>
+          <div className="w-8 h-8 border-2 border-accent/40 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-text-muted text-sm">Loading question…</p>
         </div>
       </div>
     );
@@ -811,7 +862,20 @@ export default function PracticePage() {
   // ── Render ─────────────────────────────────────────────────────────────
 
   return (
-    <div className="h-screen bg-gray-950 text-gray-100 flex flex-col overflow-hidden">
+    <div className="h-screen bg-surface-0 text-text-primary flex flex-col overflow-hidden">
+
+      {/* ── XP Toast ─────────────────────────────────────── */}
+      {xpToast && (
+        <div className="fixed top-6 right-6 z-[100] animate-bounce">
+          <div className="bg-gradient-to-br from-accent to-accent-bright border border-accent/50 rounded-2xl px-5 py-3.5 shadow-2xl shadow-indigo-900/50 flex items-center gap-3">
+            <span className="text-2xl">✨</span>
+            <div>
+              <p className="text-white font-extrabold text-sm">+{xpToast.xp} XP earned!</p>
+              <p className="text-accent-bright text-xs">Level {xpToast.level} · Keep it up!</p>
+            </div>
+          </div>
+        </div>
+      )}
       <Breadcrumbs
         items={[
           { label: "Dashboard", href: "/dashboard" },
@@ -829,16 +893,16 @@ export default function PracticePage() {
             onClick={() => setDrawerOpen(false)}
           />
           {/* Panel */}
-          <div className="relative z-10 w-[420px] max-w-[95vw] h-full bg-gray-900 border-r border-gray-800 flex flex-col shadow-2xl">
+          <div className="relative z-10 w-[420px] max-w-[95vw] h-full bg-surface-1 border-r border-border-subtle flex flex-col shadow-2xl">
             {/* Drawer header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 shrink-0">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle shrink-0">
               <div>
-                <p className="text-sm font-semibold text-gray-100">Practice Questions</p>
-                <p className="text-xs text-gray-500 mt-0.5">{filteredQuestions.length} of {allQuestions.length} questions</p>
+                <p className="text-sm font-semibold text-text-primary">Practice Questions</p>
+                <p className="text-xs text-text-muted mt-0.5">{filteredQuestions.length} of {allQuestions.length} questions</p>
               </div>
               <button
                 onClick={() => setDrawerOpen(false)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -847,10 +911,10 @@ export default function PracticePage() {
             </div>
 
             {/* Search + filters */}
-            <div className="px-3 py-3 border-b border-gray-800 space-y-2.5 shrink-0">
+            <div className="px-3 py-3 border-b border-border-subtle space-y-2.5 shrink-0">
               {/* Search */}
               <div className="relative">
-                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
                 </svg>
                 <input
@@ -858,10 +922,10 @@ export default function PracticePage() {
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   placeholder="Search questions…"
-                  className="w-full pl-8 pr-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-600 transition-colors"
+                  className="w-full pl-8 pr-3 py-1.5 bg-surface-2 border border-border-default rounded-lg text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent/40 transition-colors"
                 />
                 {searchQuery && (
-                  <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+                  <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary">
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                   </button>
                 )}
@@ -875,10 +939,10 @@ export default function PracticePage() {
                     onClick={() => setFilterDifficulty(filterDifficulty === d ? "" : d)}
                     className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
                       filterDifficulty === d
-                        ? d === "Easy"   ? "bg-green-900/60 border-green-600 text-green-300"
-                        : d === "Medium" ? "bg-yellow-900/60 border-yellow-600 text-yellow-300"
-                        :                  "bg-red-900/60 border-red-600 text-red-300"
-                        : "bg-gray-800 border-gray-700 text-gray-500 hover:border-gray-600 hover:text-gray-400"
+                        ? d === "Easy"   ? "bg-status-ok/10 border-status-ok/40 text-status-ok"
+                        : d === "Medium" ? "bg-status-warn/10 border-status-warn/40 text-status-warn"
+                        :                  "bg-status-error/12 border-status-error/45 text-status-error"
+                        : "bg-surface-2 border-border-default text-text-muted hover:border-border-strong hover:text-text-secondary"
                     }`}
                   >
                     {d}
@@ -891,13 +955,13 @@ export default function PracticePage() {
                       value={filterCategory}
                       onChange={e => setFilterCategory(e.target.value)}
                       className={`appearance-none pl-2.5 pr-6 py-1 rounded-full text-xs font-medium border transition-colors cursor-pointer focus:outline-none ${
-                        filterCategory ? "bg-purple-900/50 border-purple-600 text-purple-300" : "bg-gray-800 border-gray-700 text-gray-500"
+                        filterCategory ? "bg-gold/10 border-accent/40 text-gold" : "bg-surface-2 border-border-default text-text-muted"
                       }`}
                     >
                       <option value="">Category</option>
                       {drawerCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                     </select>
-                    <svg className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <svg className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 w-2.5 h-2.5 text-text-muted" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                     </svg>
                   </div>
@@ -909,13 +973,13 @@ export default function PracticePage() {
                       value={filterTopic}
                       onChange={e => setFilterTopic(e.target.value)}
                       className={`appearance-none pl-2.5 pr-6 py-1 rounded-full text-xs font-medium border transition-colors cursor-pointer focus:outline-none ${
-                        filterTopic ? "bg-blue-900/50 border-blue-600 text-blue-300" : "bg-gray-800 border-gray-700 text-gray-500"
+                        filterTopic ? "bg-accent/50 border-accent/40 text-accent" : "bg-surface-2 border-border-default text-text-muted"
                       }`}
                     >
                       <option value="">Topic</option>
                       {drawerTopics.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
-                    <svg className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <svg className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 w-2.5 h-2.5 text-text-muted" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                     </svg>
                   </div>
@@ -924,7 +988,7 @@ export default function PracticePage() {
                 {(filterDifficulty || filterCategory || filterTopic || searchQuery) && (
                   <button
                     onClick={() => { setFilterDifficulty(""); setFilterCategory(""); setFilterTopic(""); setSearchQuery(""); }}
-                    className="px-2.5 py-1 rounded-full text-xs border border-gray-700 text-gray-600 hover:text-gray-400 hover:border-gray-600 transition-colors"
+                    className="px-2.5 py-1 rounded-full text-xs border border-border-default text-text-muted hover:text-text-secondary hover:border-border-strong transition-colors"
                   >
                     ✕ Clear
                   </button>
@@ -936,10 +1000,10 @@ export default function PracticePage() {
             <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
               {drawerLoading ? (
                 <div className="flex items-center justify-center py-16">
-                  <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  <div className="w-6 h-6 border-2 border-accent/40 border-t-transparent rounded-full animate-spin" />
                 </div>
               ) : filteredQuestions.length === 0 ? (
-                <div className="text-center py-12 text-gray-600">
+                <div className="text-center py-12 text-text-muted">
                   <p className="text-2xl mb-2">🔍</p>
                   <p className="text-sm">No questions match your filters</p>
                 </div>
@@ -951,34 +1015,34 @@ export default function PracticePage() {
                       onClick={() => { router.push(`/practice/${q.id}`); setDrawerOpen(false); }}
                       className={`w-full text-left p-3 rounded-xl border transition-all group ${
                         q.id === parseInt(questionId, 10)
-                          ? "bg-blue-900/30 border-blue-700"
-                          : "bg-gray-800/40 border-gray-700/60 hover:bg-gray-800 hover:border-gray-600"
+                          ? "bg-accent/30 border-accent/35"
+                          : "bg-surface-2/40 border-border-default/60 hover:bg-surface-2 hover:border-border-strong"
                       }`}
                     >
-                      <p className="text-xs text-gray-200 leading-relaxed line-clamp-2 group-hover:text-white transition-colors">
+                      <p className="text-xs text-text-primary leading-relaxed line-clamp-2 group-hover:text-white transition-colors">
                         {q.question}
                       </p>
                       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-gray-700/60 text-gray-400">{q.topic}</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-surface-3/60 text-text-secondary">{q.topic}</span>
                         {q.category && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-purple-900/30 border border-purple-800/50 text-purple-400">{q.category}</span>
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-gold/10 border border-gold/20 text-gold">{q.category}</span>
                         )}
                         <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${
-                          q.difficulty === "Easy"   ? "bg-green-900/30 border-green-800/50 text-green-400"
-                          : q.difficulty === "Medium" ? "bg-yellow-900/30 border-yellow-800/50 text-yellow-400"
-                          : "bg-red-900/30 border-red-800/50 text-red-400"
+                          q.difficulty === "Easy"   ? "bg-status-ok/10 border-status-ok/30 text-status-ok"
+                          : q.difficulty === "Medium" ? "bg-status-warn/10 border-status-warn/30 text-status-warn"
+                          : "bg-status-error/12 border-status-error/30 text-status-error"
                         }`}>
                           {q.difficulty}
                         </span>
                         {q.id === parseInt(questionId, 10) && (
-                          <span className="ml-auto text-xs text-blue-400 font-medium">Current</span>
+                          <span className="ml-auto text-xs text-accent font-medium">Current</span>
                         )}
                       </div>
                     </button>
                   ))}
                   {drawerHasMore && (
-                    <div ref={drawerSentinelRef} className="flex items-center justify-center py-3 gap-2 text-gray-600 text-xs">
-                      <div className="w-3.5 h-3.5 border border-gray-700 border-t-gray-500 rounded-full animate-spin" />
+                    <div ref={drawerSentinelRef} className="flex items-center justify-center py-3 gap-2 text-text-muted text-xs">
+                      <div className="w-3.5 h-3.5 border border-border-default border-t-text-muted rounded-full animate-spin" />
                       Loading more…
                     </div>
                   )}
@@ -990,60 +1054,64 @@ export default function PracticePage() {
       )}
 
       {/* Header */}
-      <header className="shrink-0 z-20 bg-gray-950/95 backdrop-blur border-b border-gray-800 px-4 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
+      <header className="shrink-0 z-20 bg-surface-0/85 backdrop-blur-md border-b border-border-subtle px-4 sm:px-6 py-3.5">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-wrap">
             <button
               onClick={() => setDrawerOpen(true)}
-              className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-gray-700 bg-gray-800/60 hover:bg-gray-800 hover:border-gray-600 text-xs font-medium text-gray-300 transition-colors"
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border-default bg-surface-1/80 hover:bg-surface-2 hover:border-border-strong text-xs font-semibold text-text-primary transition-all shadow-sm"
             >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
-              Practice
+              <span>Problem Drawer</span>
             </button>
-            <div className="h-4 w-px bg-gray-800 shrink-0" />
+            <div className="h-4 w-px bg-surface-2 shrink-0 hidden sm:block" />
             <div className="flex items-center gap-2 min-w-0 flex-wrap">
-              <span className="text-xs font-medium px-1.5 py-0.5 bg-blue-900/40 border border-blue-800/60 text-blue-300 rounded">
+              <span className="text-xs font-semibold px-2.5 py-0.5 bg-accent/60 border border-accent/25 text-accent rounded-lg">
                 {question.topic}
               </span>
               {question.category && (
-                <span className="text-xs font-medium px-1.5 py-0.5 bg-purple-900/30 border border-purple-800 text-purple-300 rounded">
+                <span className="text-xs font-semibold px-2.5 py-0.5 bg-gold/10 border border-gold/20 text-gold rounded-lg">
                   {question.category}
                 </span>
               )}
-              <span className={`text-xs font-medium px-1.5 py-0.5 border rounded ${DIFF_COLORS[question.difficulty]}`}>
+              <span className={`text-xs font-semibold px-2.5 py-0.5 border rounded-lg ${DIFF_COLORS[question.difficulty]}`}>
                 {question.difficulty}
               </span>
               {question.company && (
-                <span className="text-xs text-gray-500">@ {question.company}</span>
+                <span className="text-xs text-text-secondary font-medium">@ {question.company}</span>
               )}
+              <NovaBadge contextName="Coach" tip="Nova provides progressive hints, complexity breakdowns, and multi-turn voice follow-up testing." />
             </div>
           </div>
 
           {/* Model selector */}
           {modelGroups && (
-            <select
-              value={model}
-              onChange={e => { setModel(e.target.value); localStorage.setItem("selectedModel", e.target.value); }}
-              className="shrink-0 bg-gray-800 border border-gray-700 text-gray-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-600"
-            >
-              {modelGroups.ollama.length > 0 && (
-                <optgroup label="Ollama (local)">
-                  {modelGroups.ollama.map(m => <option key={m} value={m}>{m}</option>)}
-                </optgroup>
-              )}
-              {modelGroups.deepseek_configured && (
-                <optgroup label="DeepSeek">
-                  {modelGroups.deepseek.map(m => <option key={m} value={m}>{m}</option>)}
-                </optgroup>
-              )}
-              {modelGroups.gemini_configured && (
-                <optgroup label="Gemini">
-                  {modelGroups.gemini.map(m => <option key={m} value={m}>{m}</option>)}
-                </optgroup>
-              )}
-            </select>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-[11px] text-text-secondary font-medium hidden sm:inline">Tutor Model:</span>
+              <select
+                value={model}
+                onChange={e => { setModel(e.target.value); localStorage.setItem("selectedModel", e.target.value); }}
+                className="bg-surface-1 border border-border-default/80 text-text-primary text-xs font-medium rounded-xl px-3 py-1.5 focus:outline-none focus:border-accent/50 cursor-pointer shadow-sm"
+              >
+                {modelGroups.ollama.length > 0 && (
+                  <optgroup label="Ollama (local)">
+                    {modelGroups.ollama.map(m => <option key={m} value={m}>{m}</option>)}
+                  </optgroup>
+                )}
+                {modelGroups.deepseek_configured && (
+                  <optgroup label="DeepSeek">
+                    {modelGroups.deepseek.map(m => <option key={m} value={m}>{m}</option>)}
+                  </optgroup>
+                )}
+                {modelGroups.gemini_configured && (
+                  <optgroup label="Gemini">
+                    {modelGroups.gemini.map(m => <option key={m} value={m}>{m}</option>)}
+                  </optgroup>
+                )}
+              </select>
+            </div>
           )}
         </div>
       </header>
@@ -1054,29 +1122,32 @@ export default function PracticePage() {
         <main className="flex-1 overflow-y-auto px-4 py-6 space-y-4 min-w-0">
 
           {/* Question card */}
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Question</span>
-              <span className="text-xs text-gray-700">#{question.id}</span>
+          <div className="bg-surface-1/80 border border-border-subtle rounded-3xl p-6 shadow-xl shadow-black/20">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-accent uppercase tracking-wider">Problem Statement</span>
+                <span className="text-xs text-text-muted font-mono">#{question.id}</span>
+              </div>
+              <span className="text-xs text-text-secondary">FAANG Technical Bar</span>
             </div>
-            <p className="text-gray-100 text-base leading-relaxed">{question.question}</p>
+            <p className="text-text-primary text-base sm:text-lg font-medium leading-relaxed">{question.question}</p>
           </div>
 
           {/* AI Sections */}
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider px-1">AI Study Tools</p>
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider px-1">AI Study Tools</p>
 
             {SECTIONS.map(({ key, icon, label, desc }) => {
               const s = sections[key];
               return (
-                <div key={key} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                <div key={key} className="bg-surface-1 border border-border-subtle rounded-2xl overflow-hidden">
                   {/* Section header */}
                   <div className="flex items-center justify-between px-4 py-3">
                     <div className="flex items-center gap-3">
                       <span className="text-base">{icon}</span>
                       <div>
-                        <p className="text-sm font-medium text-gray-200">{label}</p>
-                        <p className="text-xs text-gray-600">{desc}</p>
+                        <p className="text-sm font-medium text-text-primary">{label}</p>
+                        <p className="text-xs text-text-muted">{desc}</p>
                       </div>
                     </div>
                     <button
@@ -1084,13 +1155,13 @@ export default function PracticePage() {
                       disabled={s.loading}
                       className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all
                         ${s.generated
-                          ? "bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-600"
-                          : "bg-blue-900/40 border-blue-700 text-blue-300 hover:bg-blue-900/60"
+                          ? "bg-surface-2 border-border-default text-text-primary hover:border-border-strong"
+                          : "bg-accent/40 border-accent/35 text-accent hover:bg-accent/60"
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                       {s.loading ? (
                         <>
-                          <span className="w-3 h-3 border border-blue-400 border-t-transparent rounded-full animate-spin" />
+                          <span className="w-3 h-3 border border-accent/50 border-t-transparent rounded-full animate-spin" />
                           Generating…
                         </>
                       ) : s.generated ? (
@@ -1103,16 +1174,16 @@ export default function PracticePage() {
 
                   {/* Section content */}
                   {s.open && (
-                    <div className="border-t border-gray-800 px-4 py-4">
+                    <div className="border-t border-border-subtle px-4 py-4">
                       {s.error ? (
                         <div className="flex items-center gap-2">
-                          <p className="text-red-400 text-sm flex-1">{s.error}</p>
+                          <p className="text-status-error text-sm flex-1">{s.error}</p>
                           <button
                             onClick={() => {
                               setSections(prev => ({ ...prev, [key]: { ...prev[key], generated: false } }));
                               toggleSection(key);
                             }}
-                            className="text-xs text-blue-400 hover:underline shrink-0"
+                            className="text-xs text-accent hover:underline shrink-0"
                           >
                             Retry
                           </button>
@@ -1127,23 +1198,23 @@ export default function PracticePage() {
             })}
           </div>
 
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+          <div className="bg-surface-1 border border-border-subtle rounded-2xl overflow-hidden">
             {/* ── Collapsible header ── */}
             <button
               onClick={() => setFollowupPanelOpen(o => !o)}
-              className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-800/40 transition-colors"
+              className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-surface-2/40 transition-colors"
             >
               <div className="flex items-center gap-2">
-                <BrainCircuit className="h-4 w-4 text-emerald-400" />
-                <p className="text-sm font-semibold text-gray-200">Follow-up Mode</p>
+                <BrainCircuit className="h-4 w-4 text-status-ok" />
+                <p className="text-sm font-semibold text-text-primary">Follow-up Mode</p>
                 {followupActive && (
-                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-emerald-900/50 border border-emerald-700 text-emerald-300">
+                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-status-ok/10 border border-status-ok/35 text-status-ok">
                     Active · {followupMessages.filter(m => m.role === "user").length} answer{followupMessages.filter(m => m.role === "user").length !== 1 ? "s" : ""}
                   </span>
                 )}
               </div>
               <svg
-                className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${followupPanelOpen ? "rotate-180" : ""}`}
+                className={`w-4 h-4 text-text-muted transition-transform duration-200 ${followupPanelOpen ? "rotate-180" : ""}`}
                 fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"
               >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -1151,16 +1222,16 @@ export default function PracticePage() {
             </button>
 
             {followupPanelOpen && (
-              <div className="border-t border-gray-800 p-4 space-y-4">
-                <p className="text-xs text-gray-500 leading-relaxed">
-                  Stay on this exact question. Click <strong className="text-gray-400">Generate</strong> to receive the first interview question, then keep answering to go deeper — up to 30 rounds.
+              <div className="border-t border-border-subtle p-4 space-y-4">
+                <p className="text-xs text-text-muted leading-relaxed">
+                  Stay on this exact question. Click <strong className="text-text-secondary">Generate</strong> to receive the first interview question, then keep answering to go deeper — up to 30 rounds.
                 </p>
 
                 <div className="flex items-center justify-between gap-3">
-                  <div className="rounded-xl border border-gray-800 bg-gray-950/60 px-3 py-2.5 text-xs text-gray-400 flex items-center gap-3 flex-1 min-h-[40px]">
+                  <div className="rounded-xl border border-border-subtle bg-surface-0/60 px-3 py-2.5 text-xs text-text-secondary flex items-center gap-3 flex-1 min-h-[40px]">
                     <span>{followupStatus}</span>
                     {recorder.isRecording && (
-                      <div className="shrink-0 bg-gray-900/80 px-2 py-0.5 rounded-lg border border-gray-800 h-7 flex items-center overflow-hidden">
+                      <div className="shrink-0 bg-surface-1/80 px-2 py-0.5 rounded-lg border border-border-subtle h-7 flex items-center overflow-hidden">
                         <Waveform active={true} volume={recorder.volume} color="#34d399" />
                       </div>
                     )}
@@ -1168,35 +1239,35 @@ export default function PracticePage() {
                   <button
                     onClick={startFollowupMode}
                     disabled={followupLoading}
-                    className="shrink-0 rounded-xl border border-emerald-700 bg-emerald-900/30 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/50 disabled:opacity-50 transition-colors"
+                    className="shrink-0 rounded-xl border border-status-ok/35 bg-status-ok/10 px-3 py-2 text-xs font-semibold text-status-ok hover:bg-status-ok/10 disabled:opacity-50 transition-colors"
                   >
                     {followupLoading && !followupActive ? (
                       <span className="flex items-center gap-1.5">
-                        <span className="w-3 h-3 border border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                        <span className="w-3 h-3 border border-status-ok/50 border-t-transparent rounded-full animate-spin" />
                         Generating…
                       </span>
                     ) : followupActive ? "Restart" : "Generate"}
                   </button>
                 </div>
 
-                <div className="max-h-96 overflow-y-auto space-y-3 rounded-2xl border border-gray-800 bg-gray-950/40 p-3">
+                <div className="max-h-96 overflow-y-auto space-y-3 rounded-2xl border border-border-subtle bg-surface-0/40 p-3">
                   {!followupActive && (
-                    <div className="py-8 text-center text-gray-600">
-                      <BrainCircuit className="mx-auto mb-3 h-6 w-6 text-gray-700" />
-                      <p className="text-xs">Click <strong className="text-gray-500">Generate</strong> to receive your first interview question.</p>
+                    <div className="py-8 text-center text-text-muted">
+                      <BrainCircuit className="mx-auto mb-3 h-6 w-6 text-text-muted" />
+                      <p className="text-xs">Click <strong className="text-text-muted">Generate</strong> to receive your first interview question.</p>
                     </div>
                   )}
                   {followupMessages.map((msg, index) => (
                     <div key={index} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[92%] rounded-2xl px-3 py-2.5 text-xs leading-relaxed ${
                         msg.role === "user"
-                          ? "bg-emerald-600 text-white rounded-tr-sm"
-                          : "bg-gray-800 border border-gray-700 text-gray-200 rounded-tl-sm"
+                          ? "bg-status-ok text-white rounded-tr-sm"
+                          : "bg-surface-2 border border-border-default text-text-primary rounded-tl-sm"
                       }`}>
                         {msg.role === "assistant"
                           ? <div className="space-y-3">
                               {msg.content.split("\n\n").map((para, pi) => (
-                                <div key={pi} className={`space-y-1 ${para.startsWith("Follow-up question:") ? "pt-1 border-t border-gray-600" : ""}`}>
+                                <div key={pi} className={`space-y-1 ${para.startsWith("Follow-up question:") ? "pt-1 border-t border-border-strong" : ""}`}>
                                   {renderMarkdown(para)}
                                 </div>
                               ))}
@@ -1207,32 +1278,32 @@ export default function PracticePage() {
                   ))}
                   {followupLoading && (
                     <div className="flex justify-start">
-                      <div className="bg-gray-800 border border-gray-700 rounded-2xl rounded-tl-sm px-3 py-2.5">
+                      <div className="bg-surface-2 border border-border-default rounded-2xl rounded-tl-sm px-3 py-2.5">
                         <span className="flex gap-1">
-                          <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                          <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                          <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                          <span className="w-1.5 h-1.5 bg-surface-3 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                          <span className="w-1.5 h-1.5 bg-surface-3 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                          <span className="w-1.5 h-1.5 bg-surface-3 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                         </span>
                       </div>
                     </div>
                   )}
                   {followupReport && (
-                    <div className="rounded-2xl border border-emerald-800/40 bg-emerald-950/20 p-4">
+                    <div className="rounded-2xl border border-status-ok/30 bg-status-ok/10 p-4">
                       <div className="flex items-center justify-between gap-3 mb-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">Final depth report</p>
-                        <span className="text-sm font-bold text-emerald-300">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-status-ok">Final depth report</p>
+                        <span className="text-sm font-bold text-status-ok">
                           {followupReport.understanding_score.toFixed(0)}
-                          <span className="text-xs text-gray-500">/100</span>
+                          <span className="text-xs text-text-muted">/100</span>
                         </span>
                       </div>
-                      <p className="text-sm text-emerald-100 leading-relaxed mb-3">{followupReport.overall_assessment}</p>
+                      <p className="text-sm text-status-ok leading-relaxed mb-3">{followupReport.overall_assessment}</p>
                       {followupReport.strengths.length > 0 && (
                         <div className="mb-3">
-                          <p className="text-xs font-semibold text-emerald-400 mb-1">Strengths</p>
+                          <p className="text-xs font-semibold text-status-ok mb-1">Strengths</p>
                           <ul className="space-y-1">
                             {followupReport.strengths.map((item, index) => (
-                              <li key={index} className="flex gap-2 text-xs text-emerald-100">
-                                <span className="text-emerald-500 shrink-0">•</span>{item}
+                              <li key={index} className="flex gap-2 text-xs text-status-ok">
+                                <span className="text-status-ok shrink-0">•</span>{item}
                               </li>
                             ))}
                           </ul>
@@ -1240,11 +1311,11 @@ export default function PracticePage() {
                       )}
                       {followupReport.remaining_gaps.length > 0 && (
                         <div className="mb-3">
-                          <p className="text-xs font-semibold text-yellow-300 mb-1">Remaining gaps</p>
+                          <p className="text-xs font-semibold text-status-warn mb-1">Remaining gaps</p>
                           <ul className="space-y-1">
                             {followupReport.remaining_gaps.map((item, index) => (
-                              <li key={index} className="flex gap-2 text-xs text-yellow-100">
-                                <span className="text-yellow-500 shrink-0">•</span>{item}
+                              <li key={index} className="flex gap-2 text-xs text-text-primary">
+                                <span className="text-status-warn shrink-0">•</span>{item}
                               </li>
                             ))}
                           </ul>
@@ -1252,11 +1323,11 @@ export default function PracticePage() {
                       )}
                       {followupReport.recommended_drills.length > 0 && (
                         <div>
-                          <p className="text-xs font-semibold text-blue-300 mb-1">Recommended drills</p>
+                          <p className="text-xs font-semibold text-accent mb-1">Recommended drills</p>
                           <ul className="space-y-1">
                             {followupReport.recommended_drills.map((item, index) => (
-                              <li key={index} className="flex gap-2 text-xs text-blue-100">
-                                <span className="text-blue-500 shrink-0">•</span>{item}
+                              <li key={index} className="flex gap-2 text-xs text-accent-bright">
+                                <span className="text-accent shrink-0">•</span>{item}
                               </li>
                             ))}
                           </ul>
@@ -1283,7 +1354,7 @@ export default function PracticePage() {
                     }}
                     placeholder={followupActive ? "Answer the follow-up question…" : "Click Generate to start…"}
                     rows={3}
-                    className="flex-1 rounded-xl border border-gray-700 bg-gray-800/50 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-600 resize-none focus:outline-none focus:border-emerald-600"
+                    className="flex-1 rounded-xl border border-border-default bg-surface-2/50 px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted resize-none focus:outline-none focus:border-status-ok/40"
                   />
                   <div className="flex flex-col gap-2">
                     <button
@@ -1291,8 +1362,8 @@ export default function PracticePage() {
                       disabled={followupLoading}
                       className={`flex h-11 w-11 items-center justify-center rounded-xl text-white transition-all disabled:opacity-50 ${
                         recorder.isRecording
-                          ? "bg-red-600 hover:bg-red-500 animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.6)]"
-                          : "bg-gray-800 hover:bg-gray-700"
+                          ? "bg-status-error hover:bg-status-error animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.6)]"
+                          : "bg-surface-2 hover:bg-surface-3"
                       }`}
                       title={recorder.isRecording ? "Stop recording and submit" : "Record answer"}
                     >
@@ -1307,7 +1378,7 @@ export default function PracticePage() {
                         }
                       }}
                       disabled={followupLoading || (!followupInput.trim() && !followupActive)}
-                      className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
+                      className="flex h-11 w-11 items-center justify-center rounded-xl bg-status-ok text-white hover:bg-status-ok disabled:opacity-50"
                       title="Send follow-up answer"
                     >
                       <SendHorizontal size={16} />
@@ -1318,34 +1389,212 @@ export default function PracticePage() {
             )}
           </div>
 
+          {/* ── Python Code Editor ──────────────────────────────── */}
+          <div className="bg-surface-1 border border-border-subtle rounded-2xl overflow-hidden">
+            <button
+              onClick={() => setCodeEditorOpen(o => !o)}
+              className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-surface-2/40 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-base">🐍</span>
+                <p className="text-sm font-semibold text-text-primary">Python Code Editor</p>
+                {pastSubmissions.length > 0 && (
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full border ${
+                    pastSubmissions[0].status === "accepted"
+                      ? "bg-status-ok/10 border-status-ok/35 text-status-ok"
+                      : "bg-status-warn/10 border-status-warn/35 text-status-warn"
+                  }`}>
+                    {pastSubmissions[0].status === "accepted" ? "✓ Accepted" : "Needs revision"}
+                  </span>
+                )}
+              </div>
+              <svg
+                className={`w-4 h-4 text-text-muted transition-transform duration-200 ${codeEditorOpen ? "rotate-180" : ""}`}
+                fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {codeEditorOpen && (
+              <div className="border-t border-border-subtle p-4 space-y-4">
+                <p className="text-xs text-text-muted leading-relaxed">
+                  Write your Python solution. Submit to get AI code review, complexity analysis, and XP.
+                </p>
+
+                {/* Editor */}
+                <div className="relative">
+                  <textarea
+                    value={code}
+                    onChange={e => setCode(e.target.value)}
+                    placeholder={`# Write your Python solution here\ndef solution(...):\n    pass`}
+                    rows={12}
+                    spellCheck={false}
+                    className="w-full font-mono text-xs bg-surface-0 border border-border-default rounded-xl px-4 py-3 text-status-ok placeholder-gray-700 resize-y focus:outline-none focus:border-accent/40 transition-colors leading-relaxed"
+                  />
+                </div>
+
+                {/* Submit */}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={submitCode}
+                    disabled={!code.trim() || codeSubmitting}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-status-ok hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-colors shadow-lg shadow-emerald-900/30"
+                  >
+                    {codeSubmitting ? (
+                      <><span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />Evaluating…</>
+                    ) : (
+                      <>▶ Submit Solution</>
+                    )}
+                  </button>
+                  {code.trim() && (
+                    <button
+                      onClick={() => setCode("")}
+                      className="text-xs text-text-muted hover:text-text-secondary transition-colors"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                {codeError && (
+                  <div className="px-4 py-3 bg-status-error/10 border border-status-error/30 rounded-xl text-sm text-status-error">
+                    {codeError}
+                  </div>
+                )}
+
+                {/* Latest submission result */}
+                {codeResult && (
+                  <div className={`rounded-2xl border p-4 space-y-3 ${
+                    codeResult.evaluation.status === "accepted"
+                      ? "bg-status-ok/10 border-status-ok/30"
+                      : "bg-status-warn/10 border-status-warn/30"
+                  }`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-lg ${
+                          codeResult.evaluation.status === "accepted" ? "✅" : "⚠️"
+                        }`}>
+                          {codeResult.evaluation.status === "accepted" ? "✅" : "⚠️"}
+                        </span>
+                        <p className={`text-sm font-bold ${
+                          codeResult.evaluation.status === "accepted" ? "text-status-ok" : "text-status-warn"
+                        }`}>
+                          {codeResult.evaluation.status === "accepted" ? "Accepted" : "Needs Revision"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-text-secondary">
+                        <span>Correctness: <strong className="text-white">{codeResult.evaluation.correctness_score}</strong>/100</span>
+                        <span>Efficiency: <strong className="text-white">{codeResult.evaluation.efficiency_score}</strong>/100</span>
+                      </div>
+                    </div>
+
+                    <p className="text-sm text-text-primary leading-relaxed">{codeResult.evaluation.feedback}</p>
+
+                    <div className="flex flex-wrap gap-3 text-xs">
+                      <div className="bg-surface-1/60 border border-border-default rounded-lg px-3 py-1.5">
+                        <span className="text-text-secondary">Time: </span>
+                        <span className="text-accent font-mono font-semibold">{codeResult.evaluation.time_complexity}</span>
+                      </div>
+                      <div className="bg-surface-1/60 border border-border-default rounded-lg px-3 py-1.5">
+                        <span className="text-text-secondary">Space: </span>
+                        <span className="text-gold font-mono font-semibold">{codeResult.evaluation.space_complexity}</span>
+                      </div>
+                      <div className="bg-accent/50 border border-accent/25 rounded-lg px-3 py-1.5">
+                        <span className="text-accent font-semibold">+{codeResult.xp_earned} XP</span>
+                        <span className="text-text-muted ml-1">Review in {codeResult.next_review_days}d</span>
+                      </div>
+                    </div>
+
+                    {codeResult.evaluation.strengths.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-status-ok mb-1">✔ Strengths</p>
+                        <ul className="space-y-0.5">
+                          {codeResult.evaluation.strengths.map((s, i) => (
+                            <li key={i} className="text-xs text-status-ok flex gap-1.5"><span className="text-status-ok">•</span>{s}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {codeResult.evaluation.optimizations.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-gold mb-1">⚡ Optimizations</p>
+                        <ul className="space-y-0.5">
+                          {codeResult.evaluation.optimizations.map((o, i) => (
+                            <li key={i} className="text-xs text-text-secondary flex gap-1.5"><span className="text-gold">•</span>{o}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Submission history */}
+                {pastSubmissions.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Past Attempts ({pastSubmissions.length})</p>
+                    <div className="space-y-1.5">
+                      {pastSubmissions.slice(0, 3).map((sub, i) => (
+                        <div key={sub.id} className="flex items-center gap-3 px-3 py-2 bg-surface-2/40 border border-border-default/50 rounded-xl text-xs">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${
+                            sub.status === "accepted" ? "bg-status-ok" : "bg-status-warn"
+                          }`} />
+                          <span className="text-text-secondary">{i === 0 ? "Latest" : new Date(sub.submitted_at).toLocaleDateString()}</span>
+                          <span className={`font-medium ${
+                            sub.status === "accepted" ? "text-status-ok" : "text-status-warn"
+                          }`}>{sub.correctness_score}/100</span>
+                          {sub.next_review_at && (
+                            <span className="ml-auto text-text-muted">
+                              Review: {new Date(sub.next_review_at).toLocaleDateString()}
+                            </span>
+                          )}
+                          <span className="text-accent font-semibold">+{sub.xp_earned} XP</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Notes */}
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+          <div className="bg-surface-1 border border-border-subtle rounded-2xl p-4">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">📝 My Notes</p>
-              <span className="text-xs text-gray-700">auto-saved</span>
+              <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">📝 My Notes</p>
+              <span className="text-xs text-text-muted">auto-saved</span>
             </div>
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
               placeholder="Jot down your thoughts, approach, or things to remember…"
               rows={5}
-              className="w-full bg-gray-800/50 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-200 placeholder-gray-600 resize-none focus:outline-none focus:border-blue-600 transition-colors"
+              className="w-full bg-surface-2/50 border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted resize-none focus:outline-none focus:border-accent/40 transition-colors"
             />
           </div>
 
         </main>
 
         {/* ── Right sidebar: AI Chat ─────────────────────────────────── */}
-        <aside className="w-80 shrink-0 border-l border-gray-800 flex flex-col bg-gray-900/50">
-          <div className="p-4 border-b border-gray-800">
-            <p className="text-sm font-semibold text-gray-200">🤖 AI Study Assistant</p>
-            <p className="text-xs text-gray-600 mt-0.5">Ask anything about this question</p>
+        <aside className="hidden lg:flex w-84 shrink-0 border-l border-border-subtle flex-col bg-surface-0/70 backdrop-blur-md">
+          <div className="p-4 border-b border-border-subtle bg-surface-1/60">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+                <p className="text-sm font-bold text-text-primary">Nova DSA Tutor</p>
+              </div>
+              <span className="text-[10px] font-mono text-accent bg-accent/60 px-2 py-0.5 rounded-full border border-accent/25">
+                Interactive
+              </span>
+            </div>
+            <p className="text-xs text-text-secondary mt-1">Inquire about optimal data structures, edge cases, and proofs</p>
           </div>
 
           {/* Chat messages */}
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
             {chatHistory.length === 0 && (
-              <div className="text-center py-8 text-gray-700">
+              <div className="text-center py-8 text-text-muted">
                 <p className="text-2xl mb-2">💬</p>
                 <p className="text-xs">Start a conversation or use a quick prompt below</p>
               </div>
@@ -1354,8 +1603,8 @@ export default function PracticePage() {
               <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div className={`max-w-[90%] rounded-2xl px-3 py-2.5 text-xs leading-relaxed ${
                   msg.role === "user"
-                    ? "bg-blue-600 text-white rounded-tr-sm"
-                    : "bg-gray-800 border border-gray-700 text-gray-200 rounded-tl-sm"
+                    ? "bg-accent text-white rounded-tr-sm"
+                    : "bg-surface-2 border border-border-default text-text-primary rounded-tl-sm"
                 }`}>
                   {msg.role === "assistant"
                     ? <div className="space-y-1">{renderMarkdown(msg.content)}</div>
@@ -1366,11 +1615,11 @@ export default function PracticePage() {
             ))}
             {chatLoading && (
               <div className="flex justify-start">
-                <div className="bg-gray-800 border border-gray-700 rounded-2xl rounded-tl-sm px-3 py-2.5">
+                <div className="bg-surface-2 border border-border-default rounded-2xl rounded-tl-sm px-3 py-2.5">
                   <span className="flex gap-1">
-                    <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                    <span className="w-1.5 h-1.5 bg-surface-3 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-1.5 h-1.5 bg-surface-3 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1.5 h-1.5 bg-surface-3 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                   </span>
                 </div>
               </div>
@@ -1379,12 +1628,12 @@ export default function PracticePage() {
           </div>
 
           {/* Input */}
-          <div className="border-t border-gray-800">
+          <div className="border-t border-border-subtle">
             {/* Quick prompts — collapsible */}
-            <div className="border-b border-gray-800">
+            <div className="border-b border-border-subtle">
               <button
                 onClick={() => setQuickPromptsOpen(o => !o)}
-                className="w-full flex items-center justify-between px-3 py-2 text-xs text-gray-500 hover:text-gray-400 transition-colors"
+                className="w-full flex items-center justify-between px-3 py-2 text-xs text-text-muted hover:text-text-secondary transition-colors"
               >
                 <span className="uppercase tracking-wider font-semibold">Quick prompts</span>
                 <svg
@@ -1400,7 +1649,7 @@ export default function PracticePage() {
                     <button
                       key={i}
                       onClick={() => { sendChat(prompt); setQuickPromptsOpen(false); }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg bg-gray-800 border border-gray-700 hover:border-gray-600 text-xs text-gray-400 hover:text-gray-300 transition-colors"
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg bg-surface-2 border border-border-default hover:border-border-strong text-xs text-text-secondary hover:text-text-primary transition-colors"
                     >
                       {prompt}
                     </button>
@@ -1422,12 +1671,12 @@ export default function PracticePage() {
                   }}
                   placeholder="Ask a question… (Enter to send)"
                   rows={2}
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-xs text-gray-200 placeholder-gray-600 resize-none focus:outline-none focus:border-blue-600 transition-colors"
+                  className="flex-1 bg-surface-2 border border-border-default rounded-xl px-3 py-2 text-xs text-text-primary placeholder:text-text-muted resize-none focus:outline-none focus:border-accent/40 transition-colors"
                 />
                 <button
                   onClick={() => sendChat(chatInput)}
                   disabled={!chatInput.trim() || chatLoading}
-                  className="shrink-0 self-end w-8 h-8 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl flex items-center justify-center transition-colors"
+                  className="shrink-0 self-end w-8 h-8 bg-accent hover:bg-accent-bright disabled:opacity-40 disabled:cursor-not-allowed rounded-xl flex items-center justify-center transition-colors"
                 >
                   <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
@@ -1437,7 +1686,7 @@ export default function PracticePage() {
               {chatHistory.length > 0 && (
                 <button
                   onClick={() => setChatHistory([])}
-                  className="mt-1.5 text-xs text-gray-700 hover:text-gray-500 transition-colors"
+                  className="mt-1.5 text-xs text-text-muted hover:text-text-muted transition-colors"
                 >
                   Clear chat
                 </button>

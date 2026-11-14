@@ -18,6 +18,52 @@ router = APIRouter(prefix="/interview", tags=["interview"])
 DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", settings.database_path))
 MAX_FOLLOWUP_ROUNDS = 30
 
+# session_id -> cancellation flag. A background watcher flips this the instant
+# an "end" action (or a disconnect) arrives, so the interview loop aborts
+# without waiting out an in-flight LLM/TTS call or the inter-question pause.
+_end_flags: dict[int, asyncio.Event] = {}
+
+# ── Pre-generated opening cache ────────────────────────────────────────────────
+# Maps session_id -> asyncio.Task that resolves to (spoken_text: str, audio: bytes | None).
+# Filled by /start so the WS handler never waits for LLM + TTS on the first question.
+_opening_cache: dict[int, "asyncio.Task[tuple[str, bytes | None]]"] = {}
+
+
+async def _prebuild_opening(topic: str, question: str, model: str | None) -> tuple[str, bytes | None]:
+    """Generate the opening greeting text via LLM then synthesise it — runs in
+    the background immediately after /start returns so the WS handler gets
+    instant audio instead of waiting several seconds."""
+    try:
+        spoken_text = await assessor.generate_opening(topic, question, model=model)
+    except Exception:
+        # Fallback to a simple template so a broken LLM never blocks the interview
+        spoken_text = f"Welcome! Let's get started. Here is your first question: {question}"
+    try:
+        audio = await tts.speak(spoken_text)
+    except Exception:
+        audio = None
+    return spoken_text, audio
+
+
+def _request_end(session_id: int) -> None:
+    flag = _end_flags.get(session_id)
+    if flag is not None:
+        flag.set()
+
+
+class _SessionEnded(Exception):
+    """Raised inside the loop to unwind immediately when the user hangs up."""
+
+
+async def _sleep_until_end(session_id: int, seconds: float) -> None:
+    """Sleep that returns early (and marks the session ended) on "end"."""
+    flag = _end_flags.setdefault(session_id, asyncio.Event())
+    try:
+        await asyncio.wait_for(flag.wait(), timeout=seconds)
+    except asyncio.TimeoutError:
+        return
+    raise _SessionEnded()
+
 
 @router.post("/start")
 async def start_session(body: SessionCreate):
@@ -64,6 +110,14 @@ async def start_session(body: SessionCreate):
         )
         await db.commit()
 
+    # Kick off LLM + TTS in the background immediately — by the time the
+    # client opens the WebSocket the opening will usually be ready.
+    first_q = questions[0]
+    model_used: str | None = body.model_used or settings.ollama_model or None
+    _opening_cache[session_id] = asyncio.create_task(
+        _prebuild_opening(body.topic, first_q["question"], model_used)
+    )
+
     return {
         "session_id": session_id,
         "questions": questions,
@@ -75,6 +129,49 @@ async def start_session(body: SessionCreate):
 @router.websocket("/ws/{session_id}")
 async def interview_ws(websocket: WebSocket, session_id: int):
     await websocket.accept()
+    end_flag = _end_flags.setdefault(session_id, asyncio.Event())
+    end_flag.clear()
+
+    # Single-reader design. Exactly one task (the pump) may call
+    # websocket.receive(); a demux task routes each message — "end"/disconnect
+    # set the end flag and everything else goes to the queue the main loop reads.
+    # If instead a watcher and the main loop both called receive(), they would
+    # race and steal each other's messages (e.g. the "next" action).
+    incoming: asyncio.Queue = asyncio.Queue()
+    user_input: asyncio.Queue = asyncio.Queue()
+
+    async def _pump():
+        try:
+            while True:
+                incoming.put_nowait(await websocket.receive())
+        except WebSocketDisconnect:
+            incoming.put_nowait({"type": "websocket.disconnect", "code": 1000})
+        except Exception:
+            incoming.put_nowait({"type": "websocket.disconnect", "code": 1000})
+
+    async def _demux():
+        while True:
+            msg = await incoming.get()
+            if msg.get("type") == "websocket.disconnect":
+                _request_end(session_id)
+                user_input.put_nowait(msg)  # wake a waiting _receive_msg
+                return
+            if "bytes" in msg:
+                user_input.put_nowait(msg)  # answer audio for the main loop
+                continue
+            try:
+                data = json.loads(msg.get("text") or "{}")
+            except json.JSONDecodeError:
+                data = {}
+            if data.get("action") == "end":
+                _request_end(session_id)
+                # Surface as a clean client hang-up so a waiting receive returns.
+                user_input.put_nowait({"type": "websocket.disconnect", "code": 1000})
+                continue
+            user_input.put_nowait(msg)  # "next" and other controls
+
+    pump_task = asyncio.create_task(_pump())
+    demux_task = asyncio.create_task(_demux())
 
     try:
         session = await _get_session(session_id)
@@ -95,18 +192,9 @@ async def interview_ws(websocket: WebSocket, session_id: int):
         while q_index < len(questions):
             q = questions[q_index]
 
-            if q_index == 0:
-                spoken_text = await assessor.generate_opening(topic, q["question"], model=session_model)
-            else:
-                spoken_text = f"Let's move on. {q['question']}"
-
-            await _speak_and_display(
-                websocket,
-                spoken_text,
-                mode="question",
-                question_index=q_index,
-                round_number=None,
-            )
+            # Send the question text first: the spoken opening below needs an
+            # LLM call plus voice synthesis, which can take several seconds,
+            # and the room has nothing to render until this event arrives.
             await websocket.send_json(
                 {
                     "type": "question",
@@ -118,7 +206,59 @@ async def interview_ws(websocket: WebSocket, session_id: int):
                 }
             )
 
-            msg = await _receive_msg(websocket)
+            if q_index == 0:
+                # Use the pre-built opening (started in /start) if available.
+                prebuilt_task = _opening_cache.pop(session_id, None)
+                if prebuilt_task is not None:
+                    try:
+                        spoken_text, prebuilt_audio = await prebuilt_task
+                    except Exception:
+                        spoken_text = f"Welcome! Let's get started. {q['question']}"
+                        prebuilt_audio = None
+                else:
+                    # Fallback: generate now (slower path, only if cache missed)
+                    await websocket.send_json(
+                        {"type": "status", "message": "Nova is composing your opening question..."}
+                    )
+                    spoken_text = await assessor.generate_opening(topic, q["question"], model=session_model)
+                    prebuilt_audio = None
+
+                # Send the interviewer message text immediately (no waiting)
+                await websocket.send_json(
+                    {
+                        "type": "interviewer_message",
+                        "text": spoken_text,
+                        "mode": "question",
+                        "question_index": q_index,
+                        "round": None,
+                    }
+                )
+                # Stream pre-built audio if available, otherwise synthesize now
+                if prebuilt_audio:
+                    await websocket.send_bytes(prebuilt_audio)
+                else:
+                    try:
+                        audio_bytes = await tts.speak(spoken_text)
+                        if audio_bytes:
+                            await websocket.send_bytes(audio_bytes)
+                        else:
+                            await websocket.send_json({"type": "audio_end"})
+                    except Exception as exc:
+                        await websocket.send_json(
+                            {"type": "status", "message": f"Voice unavailable ({exc}); continuing with text only."}
+                        )
+                        await websocket.send_json({"type": "audio_end"})
+            else:
+                spoken_text = f"Let's move on. {q['question']}"
+                await _speak_and_display(
+                    websocket,
+                    spoken_text,
+                    mode="question",
+                    question_index=q_index,
+                    round_number=None,
+                )
+
+            msg = await _receive_msg(user_input)
             if "bytes" not in msg:
                 try:
                     data = json.loads(msg.get("text", "{}"))
@@ -180,6 +320,7 @@ async def interview_ws(websocket: WebSocket, session_id: int):
                     initial_feedback=score.llm_feedback,
                     question_index=q_index,
                     model=session_model,
+                    user_input=user_input,
                 )
                 await _save_followup_report(response_id, report)
                 await websocket.send_json({"type": "followup_report", "report": report})
@@ -197,7 +338,7 @@ async def interview_ws(websocket: WebSocket, session_id: int):
                             "message": "Saved follow-up report. Click Next question when you are ready.",
                         }
                     )
-                    if not await _wait_for_next_question(websocket):
+                    if not await _wait_for_next_question(websocket, user_input):
                         break
             else:
                 await websocket.send_json(
@@ -206,7 +347,7 @@ async def interview_ws(websocket: WebSocket, session_id: int):
                         "message": "Reviewing feedback — next question in 10 seconds...",
                     }
                 )
-                await asyncio.sleep(10)
+                await _sleep_until_end(session_id, 10)
 
             q_index += 1
 
@@ -229,6 +370,15 @@ async def interview_ws(websocket: WebSocket, session_id: int):
 
     except WebSocketDisconnect:
         await _abandon_session(session_id)
+    except Exception as exc:  # noqa: BLE001 — never leave the client hanging
+        try:
+            await websocket.send_json(
+                {"type": "error", "message": f"Nova hit an error mid-interview: {exc}"}
+            )
+            await websocket.close()
+        except Exception:
+            pass
+        await _abandon_session(session_id)
 
 
 async def _run_followup_mode(
@@ -238,6 +388,7 @@ async def _run_followup_mode(
     initial_feedback: str,
     question_index: int,
     model: str | None,
+    user_input: asyncio.Queue,
 ) -> tuple[dict, bool]:
     seed_review = await assessor.review_followup_answer(
         question=question["question"],
@@ -277,7 +428,7 @@ async def _run_followup_mode(
         # and making the agent stop responding after just 2 real answers.
         audio_received = False
         while True:
-            msg = await _receive_msg(websocket)
+            msg = await _receive_msg(user_input)
             if "bytes" not in msg:
                 try:
                     data = json.loads(msg.get("text", "{}"))
@@ -365,16 +516,28 @@ async def _run_followup_mode(
     return report, advance_requested
 
 
-async def _receive_msg(websocket: WebSocket) -> dict:
-    msg = await websocket.receive()
+def _raise_if_ended(session_id: int) -> None:
+    """Abort the interview flow if the user hung up while we were busy.
+
+    Call this after any expensive await (LLM, STT, TTS) so an "end" that
+    arrives mid-generation stops the flow promptly instead of running on to
+    the next receive point.
+    """
+    flag = _end_flags.get(session_id)
+    if flag is not None and flag.is_set():
+        raise _SessionEnded()
+
+
+async def _receive_msg(user_input: asyncio.Queue) -> dict:
+    msg = await user_input.get()
     if msg.get("type") == "websocket.disconnect":
         raise WebSocketDisconnect(code=msg.get("code", 1000))
     return msg
 
 
-async def _wait_for_next_question(websocket: WebSocket) -> bool:
+async def _wait_for_next_question(websocket: WebSocket, user_input: asyncio.Queue) -> bool:
     while True:
-        msg = await _receive_msg(websocket)
+        msg = await _receive_msg(user_input)
         if "bytes" in msg:
             await websocket.send_json(
                 {
@@ -410,7 +573,15 @@ async def _speak_and_display(
             "round": round_number,
         }
     )
-    audio_bytes = await tts.speak(text)
+    try:
+        audio_bytes = await tts.speak(text)
+    except Exception as exc:
+        # Voice is a nice-to-have; a TTS failure must not kill the session
+        # (the client waits for audio_end before unlocking the mic).
+        await websocket.send_json(
+            {"type": "status", "message": f"Voice unavailable ({exc}); continuing with text only."}
+        )
+        audio_bytes = None
     if audio_bytes:
         await websocket.send_bytes(audio_bytes)
     else:
